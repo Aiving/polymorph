@@ -21,22 +21,20 @@ impl MeasuredCubic {
     }
 
     pub(crate) fn cut_at_progress<T: Measurer>(self, measurer: &T, cut_outline_progress: f32) -> (Self, Self) {
-        // Floating point errors further up can cause cutOutlineProgress to land just
+        // Floating point errors further up can cause cut_outline_progress to land just
         // slightly outside of the start/end progress for this cubic, so we limit it
         // to those bounds to avoid further errors later
         let bounded_cut_outline_progress = cut_outline_progress.clamp(self.start_outline_progress, self.end_outline_progress);
         let outline_progress_size = self.end_outline_progress - self.start_outline_progress;
         let progress_from_start = bounded_cut_outline_progress - self.start_outline_progress;
 
-        // Note that in earlier parts of the computation, we have empty MeasuredCubics
-        // (cubics with progressSize == 0f), but those cubics are filtered out
-        // before this method is called.
         let relative_progress = progress_from_start / outline_progress_size;
         let t = measurer.find_cubic_cut_point(&self.cubic, relative_progress * self.measured_size);
 
         assert!((0.0..=1.0).contains(&t), "Cubic cut point is expected to be between 0 and 1");
 
-        // c1/c2 are the two new cubics, then we return MeasuredCubics created from them
+        // c1/c2 are the two new cubics, then we return (MeasuredCubic, MeasuredCubic)
+        // created from them
         let (c1, c2) = self.cubic.split(t);
 
         (
@@ -117,15 +115,11 @@ impl<T: Measurer> MeasuredPolygon<T> {
 
         let total_measure = measure_results[measure_results.len() - 1];
 
-        // Equivalent to `measures.map { it / totalMeasure }` but without Iterator
-        // allocation.
         let mut outline_progress = Vec::with_capacity(measure_results.len());
 
         for measure in measure_results {
             outline_progress.push(measure / total_measure);
         }
-
-        // debugLog(LOG_TAG) { "Total size: $totalMeasure" }
 
         let mut features = Vec::new();
 

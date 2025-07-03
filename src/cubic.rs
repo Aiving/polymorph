@@ -76,10 +76,10 @@ impl Cubic {
 
     #[allow(clippy::cognitive_complexity)]
     pub fn aabb(&self, approximate: bool) -> Aabb {
-        // A curve might be of zero-length, with both anchors co-lated.
-        // Just return the point itself.
         let anchor0 = self.anchor0();
 
+        // A curve might be of zero-length, with both anchors co-lated.
+        // Just return the point itself.
         if self.zero_length() {
             return Aabb::new(anchor0, anchor0);
         }

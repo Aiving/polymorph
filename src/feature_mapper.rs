@@ -58,21 +58,17 @@ impl<'a> MappingHelper<'a> {
 
 impl DoubleMapper {
     pub fn from_features(features1: &[ProgressableFeature], features2: &[ProgressableFeature]) -> Self {
+        // We only use corners for this mapping.
+
         let mut filtered_features1 = Vec::new();
         let mut filtered_features2 = Vec::new();
 
-        // We only use corners for this mapping.
-
-        // Performance: Builds the list by avoiding creating an unnecessary Iterator to
-        // iterate through the features1 List.
         for feature in features1 {
             if feature.feature.is_corner() {
                 filtered_features1.push(feature);
             }
         }
 
-        // Performance: Builds the list by avoiding creating an unnecessary Iterator to
-        // iterate through the features2 List.
         for feature in features2 {
             if feature.feature.is_corner() {
                 filtered_features2.push(feature);
@@ -126,8 +122,6 @@ fn feature_representative_point(feature: &Feature) -> Point {
 }
 
 fn feature_dist_squared(f1: &Feature, f2: &Feature) -> f32 {
-    // TODO: We might want to enable concave-convex matching in some situations. If
-    // so, the  approach below will not work
     if f1.is_corner_and(|f1_convex| f2.is_corner_and(|f2_convex| f1_convex != f2_convex)) {
         // Simple hack to force all features to map only to features of the same
         // concavity, by returning an infinitely large distance in that case

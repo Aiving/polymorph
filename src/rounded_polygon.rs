@@ -135,7 +135,7 @@ impl RoundedCorner {
         let num = (p1 - p0).dot(rotated_d1.to_vector());
 
         // Also check the relative value. This is equivalent to abs(den/num) <
-        // DistanceEpsilon, but avoid doing a division
+        // DISTANCE_EPSILON, but avoid doing a division
         if den.abs() < DISTANCE_EPSILON * num.abs() {
             None
         } else {
@@ -156,7 +156,7 @@ impl RoundedCorner {
         circle_center: Point,
         actual_r: f32,
     ) -> Cubic {
-        // sideStart is the anchor, 'anchor' is actual control point
+        // side_start is the anchor, 'anchor' is actual control point
         let side_direction = (side_start - corner).to_point().get_direction();
         let curve_start = corner + (side_direction * actual_round_cut * (1.0 + actual_smoothing_values)).to_vector();
         // We use an approximation to cut a part of the circle section proportional to 1
@@ -181,11 +181,7 @@ impl RoundedCorner {
         Cubic::new(curve_start, anchor_start, anchor_end, curve_end)
     }
 
-    pub fn get_cubics(
-        &mut self,
-        allowed_cut0: f32,
-        allowed_cut1: f32, // = allowedCut0
-    ) -> Vec<Cubic> {
+    pub fn get_cubics(&mut self, allowed_cut0: f32, allowed_cut1: f32) -> Vec<Cubic> {
         // We use the minimum of both cuts to determine the radius, but if there is more
         // space in one side we can use it for smoothing.
         let allowed_cut = allowed_cut0.min(allowed_cut1);
@@ -271,6 +267,7 @@ impl RoundedPolygon {
             first_feature_split_start.replace(vec![features[0].cubics[0], start]);
             first_feature_split_end.replace(vec![end, features[0].cubics[2]]);
         }
+
         // iterating one past the features list size allows us to insert the initial
         // split cubic if it exists
         for i in 0..=features.len() {
@@ -290,8 +287,6 @@ impl RoundedPolygon {
 
             for &cubic in feature_cubics {
                 // Skip zero-length curves; they add nothing and can trigger rendering artifacts
-                // let cubic = feature_cubics[j];
-
                 if !cubic.zero_length() {
                     if let Some(last_cubic) = last_cubic {
                         cubics.push(last_cubic);
@@ -461,26 +456,15 @@ impl RoundedPolygon {
 
     #[must_use]
     pub fn normalized(self) -> Self {
-        struct NormalizeTransformer {
-            offset: Point,
-            divide_by: f32,
-        }
-
-        impl PointTransformer for NormalizeTransformer {
-            fn transform(&self, point: Point) -> Point {
-                (point + self.offset.to_vector()) / self.divide_by
-            }
-        }
-
         let bounds = self.aabb(true);
         let size = bounds.max - bounds.min;
 
         let max_side = size.x.max(size.y);
 
         // Center the shape if bounds are not a square
-        let offset = ((Point::splat(max_side) - size) / 2.0 - bounds.min).to_point(); /* top */
+        let offset = ((Point::splat(max_side) - size) / 2.0 - bounds.min).to_point();
 
-        self.transformed(NormalizeTransformer { offset, divide_by: max_side })
+        self.transformed(|point| point + offset.to_vector() / max_side)
     }
 
     pub fn to_path<P, T: PathBuilder<P>>(&self, path: T, start_angle: Option<f32>, repeat_path: bool, close_path: bool) -> P {

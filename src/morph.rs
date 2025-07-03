@@ -1,8 +1,10 @@
+use core::f32;
+
 use crate::{
     Cubic, DoubleMapper, MeasuredPolygon, RoundedPolygon,
-    geometry::{ANGLE_EPSILON, Angle, Matrix3},
+    geometry::ANGLE_EPSILON,
     measurer::LengthMeasurer,
-    path::PathBuilder,
+    path::{PathBuilder, path_from_cubics},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,60 +60,18 @@ impl Morph {
         cubics
     }
 
-    pub fn to_path<O, T: PathBuilder<O>>(
-        &self,
-        progress: f32,
-        mut path: T,
-        start_angle: u16,  // = 270,
-        repeat_path: bool, // = false,
-        close_path: bool,  // = true,
-    ) -> impl PathBuilder<O> {
+    pub fn to_path<O, T: PathBuilder<O>>(&self, progress: f32, path: T, start_angle: Option<f32>, repeat_path: bool, close_path: bool) -> O {
         let cubics = self.as_cubics(progress);
-        let angle_to_first_cubic = (cubics[0].anchor0().y - self.start.center.y).atan2(cubics[0].anchor0().x - self.start.center.x);
 
-        let mut first = true;
-        let mut first_cubic: Option<Cubic> = None;
-
-        path.rewind();
-
-        for it in &cubics {
-            if first {
-                path.move_to(it.anchor0());
-
-                if start_angle != 0 {
-                    first_cubic.replace(*it);
-                }
-
-                first = false;
-            }
-
-            path.cubic_to(it.control0(), it.control1(), it.anchor1());
-        }
-
-        if repeat_path {
-            let mut first_in_repeat = true;
-
-            for it in cubics {
-                if first_in_repeat {
-                    path.line_to(it.anchor0());
-
-                    first_in_repeat = false;
-                }
-
-                path.cubic_to(it.control0(), it.control1(), it.anchor1());
-            }
-        }
-
-        if close_path {
-            path.close();
-        }
-
-        if start_angle != 0 && first_cubic.is_some() {
-            // Rotate the Path to to start from the given angle.
-            path.transformed(Matrix3::rotation(0.0, 0.0, 1.0, Angle::degrees(-angle_to_first_cubic + f32::from(start_angle))))
-        } else {
-            path.transformed(Matrix3::identity())
-        }
+        path_from_cubics(
+            path,
+            start_angle.unwrap_or(f32::consts::PI * 3.0 / 2.0),
+            repeat_path,
+            close_path,
+            &cubics,
+            (self.start.center + self.end.center.to_vector()) / 2.0,
+        )
+        .build()
     }
 
     /// # Panics
@@ -154,7 +114,7 @@ impl Morph {
         // Iterate until all curves are accounted for and matched
         while let (Some(bb1), Some(bb2)) = (b1.take(), b2.take()) {
             // Progresses are in shape1's perspective
-            // b1a, b2a are ending progress values of current measured cubics in [0,1] range
+            // b1a, b2a are ending progress values of current measured cubics in 0..=1 range
             let b1a = if i1 == bs1.cubics.len() { 1.0 } else { bb1.end_outline_progress };
             let b2a = if i2 == bs2.cubics.len() {
                 1.0
@@ -171,13 +131,11 @@ impl Morph {
 
                 (a, Some(b))
             } else {
-                (bb1, {
-                    let value = bs1.cubics.get(i1);
+                let value = bs1.cubics.get(i1).copied();
 
-                    i1 += 1;
+                i1 += 1;
 
-                    value.copied()
-                })
+                (bb1, value)
             };
 
             let (seg2, newb2) = if b2a > minb + ANGLE_EPSILON {
@@ -185,13 +143,11 @@ impl Morph {
 
                 (a, Some(b))
             } else {
-                (bb2, {
-                    let value = bs2.cubics.get(i2);
+                let value = bs2.cubics.get(i2).copied();
 
-                    i2 += 1;
+                i2 += 1;
 
-                    value.copied()
-                })
+                (bb2, value)
             };
 
             ret.push((seg1.cubic, seg2.cubic));
