@@ -1,0 +1,580 @@
+use core::f32;
+
+use crate::{
+    Cubic, Feature,
+    geometry::{Aabb, GeometryExt, Point, PointTransformer, Vector},
+    path::{PathBuilder, path_from_cubics},
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct CornerRounding {
+    pub radius: f32,
+    pub smoothing: f32,
+}
+
+impl CornerRounding {
+    pub const UNROUNDED: Self = Self { radius: 0.0, smoothing: 0.0 };
+
+    pub const fn new(radius: f32) -> Self {
+        Self { radius, smoothing: 0.0 }
+    }
+
+    pub const fn smoothed(radius: f32, smoothing: f32) -> Self {
+        Self { radius, smoothing }
+    }
+}
+
+pub struct RoundedPoint {
+    pub offset: Point,
+    pub rounding: CornerRounding,
+}
+
+impl RoundedPoint {
+    pub const fn unrounded(offset: Point) -> Self {
+        Self {
+            offset,
+            rounding: CornerRounding::UNROUNDED,
+        }
+    }
+
+    pub const fn new(offset: Point, rounding: CornerRounding) -> Self {
+        Self { offset, rounding }
+    }
+}
+
+struct RoundedCorner {
+    p0: Point,
+    p1: Point,
+    p2: Point,
+
+    d1: Vector,
+    d2: Vector,
+
+    corner_radius: f32,
+    smoothing: f32,
+    expected_round_cut: f32,
+
+    center: Point,
+}
+
+const DISTANCE_EPSILON: f32 = 1e-4f32;
+
+impl RoundedCorner {
+    pub fn new(p0: Point, p1: Point, p2: Point, rounding: Option<CornerRounding>) -> Self {
+        let mut d1 = Vector::zero();
+        let mut d2 = Vector::zero();
+        let mut corner_radius = 0.0;
+        let mut smoothing = 0.0;
+        let mut expected_round_cut = 0.0;
+
+        let v01 = p0 - p1;
+        let v21 = p2 - p1;
+        let d01 = v01.length();
+        let d21 = v21.length();
+
+        if d01 > 0.0 && d21 > 0.0 {
+            d1 = v01 / d01;
+            d2 = v21 / d21;
+
+            corner_radius = rounding.map_or(0.0, |r| r.radius);
+            smoothing = rounding.map_or(0.0, |r| r.smoothing);
+
+            // cosine of angle at p1 is dot product of unit vectors to the other two
+            // vertices
+            let cos_angle = d1.dot(d2);
+
+            // identity: sin^2 + cos^2 = 1
+            // sinAngle gives us the intersection
+            let sin_angle = cos_angle.mul_add(-cos_angle, 1.0).sqrt();
+
+            // How much we need to cut, as measured on a side, to get the required radius
+            // calculating where the rounding circle hits the edge
+            // This uses the identity of tan(A/2) = sinA/(1 + cosA), where tan(A/2) =
+            // radius/cut
+
+            if sin_angle > 1e-3 {
+                expected_round_cut = corner_radius * (cos_angle + 1.0) / sin_angle;
+            }
+        }
+
+        Self {
+            p0,
+            p1,
+            p2,
+            d1,
+            d2,
+            corner_radius,
+            smoothing,
+            expected_round_cut,
+            center: Point::zero(),
+        }
+    }
+
+    pub const fn expected_cut(&self) -> f32 {
+        (1.0 + self.smoothing) * self.expected_round_cut
+    }
+
+    fn calculate_actual_smoothing_value(&self, allowed_cut: f32) -> f32 {
+        if allowed_cut > self.expected_cut() {
+            self.smoothing
+        } else if allowed_cut > self.expected_round_cut {
+            self.smoothing * (allowed_cut - self.expected_round_cut) / (self.expected_cut() - self.expected_round_cut)
+        } else {
+            0.0
+        }
+    }
+
+    fn line_intersection(p0: Point, d0: Point, p1: Point, d1: Point) -> Option<Point> {
+        let rotated_d1 = d1.rotate90();
+        let den = d0.to_vector().dot(rotated_d1.to_vector());
+
+        if den.abs() < DISTANCE_EPSILON {
+            return None;
+        }
+
+        let num = (p1 - p0).dot(rotated_d1.to_vector());
+
+        // Also check the relative value. This is equivalent to abs(den/num) <
+        // DistanceEpsilon, but avoid doing a division
+        if den.abs() < DISTANCE_EPSILON * num.abs() {
+            None
+        } else {
+            let k = num / den;
+
+            Some(p0 + (d0 * k).to_vector())
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn compute_flanking_curve(
+        actual_round_cut: f32,
+        actual_smoothing_values: f32,
+        corner: Point,
+        side_start: Point,
+        circle_segment_intersection: Point,
+        other_circle_segment_intersection: Point,
+        circle_center: Point,
+        actual_r: f32,
+    ) -> Cubic {
+        // sideStart is the anchor, 'anchor' is actual control point
+        let side_direction = (side_start - corner).to_point().get_direction();
+        let curve_start = corner + (side_direction * actual_round_cut * (1.0 + actual_smoothing_values)).to_vector();
+        // We use an approximation to cut a part of the circle section proportional to 1
+        // - smooth, When smooth = 0, we take the full section, when smooth = 1,
+        // we take nothing. TODO: revisit this, it can be problematic as it
+        // approaches 180 degrees
+        let p = circle_segment_intersection.lerp(
+            (circle_segment_intersection + other_circle_segment_intersection.to_vector()) / 2.0,
+            actual_smoothing_values,
+        );
+        // The flanking curve ends on the circle
+        let curve_end = circle_center + (p - circle_center).normalize() * actual_r;
+        // The anchor on the circle segment side is in the intersection between the
+        // tangent to the circle in the circle/flanking curve boundary and the
+        // linear segment.
+        let circle_tangent = (curve_end - circle_center).to_point().rotate90();
+        let anchor_end = Self::line_intersection(side_start, side_direction, curve_end, circle_tangent).unwrap_or(circle_segment_intersection);
+        // From what remains, we pick a point for the start anchor.
+        // 2/3 seems to come from design tools?
+        let anchor_start = (curve_start + (anchor_end * 2.0).to_vector()) / 3.0;
+
+        Cubic::new(curve_start, anchor_start, anchor_end, curve_end)
+    }
+
+    pub fn get_cubics(
+        &mut self,
+        allowed_cut0: f32,
+        allowed_cut1: f32, // = allowedCut0
+    ) -> Vec<Cubic> {
+        // We use the minimum of both cuts to determine the radius, but if there is more
+        // space in one side we can use it for smoothing.
+        let allowed_cut = allowed_cut0.min(allowed_cut1);
+
+        // Nothing to do, just use lines, or a point
+        if self.expected_round_cut < DISTANCE_EPSILON || allowed_cut < DISTANCE_EPSILON || self.corner_radius < DISTANCE_EPSILON {
+            self.center = self.p1;
+
+            return vec![Cubic::straight_line(self.p1, self.p1)];
+        }
+
+        // How much of the cut is required for the rounding part.
+        let actual_round_cut = allowed_cut.min(self.expected_round_cut);
+        // We have two smoothing values, one for each side of the vertex
+        // Space is used for rounding values first. If there is space left over, then we
+        // apply smoothing, if it was requested
+        let actual_smoothing0 = self.calculate_actual_smoothing_value(allowed_cut0);
+        let actual_smoothing1 = self.calculate_actual_smoothing_value(allowed_cut1);
+        // Scale the radius if needed
+        let actual_r = self.corner_radius * actual_round_cut / self.expected_round_cut;
+        // Distance from the corner (p1) to the center
+        let center_distance = actual_r.hypot(actual_round_cut);
+
+        // Center of the arc we will use for rounding
+        self.center = self.p1 + (((self.d1 + self.d2) / 2.0).get_direction() * center_distance);
+
+        let circle_intersection0 = self.p1 + (self.d1 * actual_round_cut);
+        let circle_intersection2 = self.p1 + (self.d2 * actual_round_cut);
+
+        let flanking0 = Self::compute_flanking_curve(
+            actual_round_cut,
+            actual_smoothing0,
+            self.p1,
+            self.p0,
+            circle_intersection0,
+            circle_intersection2,
+            self.center,
+            actual_r,
+        );
+
+        let flanking2 = Self::compute_flanking_curve(
+            actual_round_cut,
+            actual_smoothing1,
+            self.p1,
+            self.p2,
+            circle_intersection2,
+            circle_intersection0,
+            self.center,
+            actual_r,
+        )
+        .reverse();
+
+        let flanking1 = Cubic::circular_arc(self.center, flanking0.anchor1(), flanking2.anchor0());
+
+        vec![flanking0, flanking1, flanking2]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RoundedPolygon {
+    pub features: Vec<Feature>,
+    pub center: Point,
+    pub cubics: Vec<Cubic>,
+}
+
+impl RoundedPolygon {
+    pub fn new(features: Vec<Feature>, center: Point) -> Self {
+        let mut cubics = Vec::new();
+
+        // The first/last mechanism here ensures that the final anchor point in the
+        // shape exactly matches the first anchor point. There can be rendering
+        // artifacts introduced by those points being slightly off, even by much
+        // less than a pixel
+        let mut first_cubic: Option<Cubic> = None;
+        let mut last_cubic: Option<Cubic> = None;
+        let mut first_feature_split_start: Option<Vec<Cubic>> = None;
+        let mut first_feature_split_end: Option<Vec<Cubic>> = None;
+
+        if !features.is_empty() && features[0].cubics.len() == 3 {
+            let center_cubic = features[0].cubics[1];
+            let (start, end) = center_cubic.split(0.5);
+
+            first_feature_split_start.replace(vec![features[0].cubics[0], start]);
+            first_feature_split_end.replace(vec![end, features[0].cubics[2]]);
+        }
+        // iterating one past the features list size allows us to insert the initial
+        // split cubic if it exists
+        for i in 0..=features.len() {
+            let feature_cubics = if i == 0 && first_feature_split_end.is_some() {
+                let Some(cubics) = &first_feature_split_end else { unreachable!() };
+
+                cubics
+            } else if i == features.len() {
+                if let Some(cubics) = &first_feature_split_start {
+                    cubics
+                } else {
+                    break;
+                }
+            } else {
+                &features[i].cubics
+            };
+
+            for &cubic in feature_cubics {
+                // Skip zero-length curves; they add nothing and can trigger rendering artifacts
+                // let cubic = feature_cubics[j];
+
+                if !cubic.zero_length() {
+                    if let Some(last_cubic) = last_cubic {
+                        cubics.push(last_cubic);
+                    }
+
+                    last_cubic.replace(cubic);
+
+                    if first_cubic.is_none() {
+                        first_cubic.replace(cubic);
+                    }
+                } else if let Some(last_cubic) = last_cubic.as_mut() {
+                    // Dropping several zero-ish length curves in a row can lead to
+                    // enough discontinuity to throw an exception later, even though the
+                    // distances are quite small. Account for that by making the last
+                    // cubic use the latest anchor point, always.
+                    last_cubic.points[3] = cubic.anchor1();
+                }
+            }
+        }
+
+        if let (Some(last_cubic), Some(first_cubic)) = (last_cubic, first_cubic) {
+            cubics.push(Cubic::new(
+                last_cubic.anchor0(),
+                last_cubic.control0(),
+                last_cubic.control1(),
+                first_cubic.anchor0(),
+            ));
+        } else {
+            // Empty / 0-sized polygon.
+            cubics.push(Cubic::new(center, center, center, center));
+        }
+
+        Self { features, center, cubics }
+    }
+
+    pub fn from_points(points: &[RoundedPoint], repeats: usize, mirroring: bool) -> Self {
+        custom_polygon(points, repeats, None, mirroring)
+    }
+
+    pub fn from_points_at(points: &[RoundedPoint], repeats: usize, center: Point, mirroring: bool) -> Self {
+        custom_polygon(points, repeats, Some(center), mirroring)
+    }
+
+    /// # Panics
+    ///
+    /// May panic if:
+    /// - The polygon contains fewer than 3 vertices
+    /// - The size of the `vertices` is odd
+    /// - The `per_vertex_rounding` is not empty, but its size does not
+    ///   correspond to the number of vertices in the polygon (`vertices.len() /
+    ///   2`)
+    pub fn from_vertices(vertices: &[f32], rounding: CornerRounding, per_vertex_rounding: &[CornerRounding], center: Point) -> Self {
+        assert!(vertices.len() >= 6, "Polygons must have at least 3 vertices");
+        assert!(vertices.len() % 2 != 1, "The vertices array should have even size");
+        assert!(
+            per_vertex_rounding.is_empty() || per_vertex_rounding.len() * 2 == vertices.len(),
+            "per_vertex_rounding array should be either empty or the same size as the number of vertices (vertices.len() / 2)"
+        );
+
+        let mut corners = <Vec<Vec<Cubic>>>::new();
+        let n = vertices.len() / 2;
+        let mut rounded_corners = <Vec<RoundedCorner>>::new();
+
+        for i in 0..n {
+            let vtx_rounding = per_vertex_rounding.get(i).copied().unwrap_or(rounding);
+            let prev_index = ((i + n - 1) % n) * 2;
+            let next_index = ((i + 1) % n) * 2;
+
+            rounded_corners.push(RoundedCorner::new(
+                Point::new(vertices[prev_index], vertices[prev_index + 1]),
+                Point::new(vertices[i * 2], vertices[i * 2 + 1]),
+                Point::new(vertices[next_index], vertices[next_index + 1]),
+                Some(vtx_rounding),
+            ));
+        }
+
+        let cut_adjusts = (0..n)
+            .map(|ix| {
+                let expected_round_cut = rounded_corners[ix].expected_round_cut + rounded_corners[(ix + 1) % n].expected_round_cut;
+                let expected_cut = rounded_corners[ix].expected_cut() + rounded_corners[(ix + 1) % n].expected_cut();
+                let vtx_x = vertices[ix * 2];
+                let vtx_y = vertices[ix * 2 + 1];
+                let next_vtx_x = vertices[((ix + 1) % n) * 2];
+                let next_vtx_y = vertices[((ix + 1) % n) * 2 + 1];
+                let side_size = (vtx_x - next_vtx_x).hypot(vtx_y - next_vtx_y);
+
+                // Check expected_round_cut first, and ensure we fulfill rounding needs first
+                // for both corners before using space for smoothing
+                if expected_round_cut > side_size {
+                    // Not enough room for fully rounding, see how much we can actually do.
+                    (side_size / expected_round_cut, 0.0)
+                } else if expected_cut > side_size {
+                    // We can do full rounding, but not full smoothing.
+                    (1.0, (side_size - expected_round_cut) / (expected_cut - expected_round_cut))
+                } else {
+                    // There is enough room for rounding & smoothing.
+                    (1.0, 1.0)
+                }
+            })
+            .collect::<Vec<_>>();
+
+        // Create and store list of beziers for each potentially rounded corner
+        for i in 0..n {
+            // allowed_cuts[0] is for the side from the previous corner to this one,
+            // allowed_cuts[1] is for the side from this corner to the next one.
+            let mut allowed_cuts = [0.0; 2];
+
+            for delta in 0..=1 {
+                let (round_cut_ratio, cut_ratio) = cut_adjusts[(i + n - 1 + delta) % n];
+
+                allowed_cuts[delta] = rounded_corners[i].expected_round_cut.mul_add(
+                    round_cut_ratio,
+                    (rounded_corners[i].expected_cut() - rounded_corners[i].expected_round_cut) * cut_ratio,
+                );
+            }
+
+            let corner = rounded_corners[i].get_cubics(allowed_cuts[0], allowed_cuts[1]);
+
+            corners.push(corner);
+        }
+
+        let mut temp_features = <Vec<Feature>>::new();
+
+        for i in 0..n {
+            // Note that these indices are for pairs of values (points), they need to be
+            // doubled to access the xy values in the vertices float array
+            let prev_vtx_index = (i + n - 1) % n;
+            let next_vtx_index = (i + 1) % n;
+            let curr_vertex = Point::new(vertices[i * 2], vertices[i * 2 + 1]);
+            let prev_vertex = Point::new(vertices[prev_vtx_index * 2], vertices[prev_vtx_index * 2 + 1]);
+            let next_vertex = Point::new(vertices[next_vtx_index * 2], vertices[next_vtx_index * 2 + 1]);
+            let convex = prev_vertex.is_convex(curr_vertex, next_vertex);
+
+            temp_features.push(Feature::corner(corners[i].clone(), convex));
+            temp_features.push(Feature::edge(vec![Cubic::straight_line(
+                corners[i].last().unwrap().anchor1(),
+                corners[(i + 1) % n].first().unwrap().anchor0(),
+            )]));
+        }
+
+        let center = if center.x == f32::MIN || center.y == f32::MIN {
+            center_from_vertices(vertices)
+        } else {
+            center
+        };
+
+        Self::new(temp_features, center)
+    }
+
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn transformed<T: PointTransformer>(self, f: T) -> Self {
+        let center = f.transform(self.center);
+
+        Self::new(self.features.into_iter().map(|feature| feature.transformed(&f)).collect(), center)
+    }
+
+    pub fn aabb(&self, approximate: bool) -> Aabb {
+        let mut aabb = Aabb::new(Point::splat(f32::MAX), Point::splat(f32::MIN));
+
+        for cubic in &self.cubics {
+            aabb = aabb.union(&cubic.aabb(approximate));
+        }
+
+        aabb
+    }
+
+    #[must_use]
+    pub fn normalized(self) -> Self {
+        struct NormalizeTransformer {
+            offset: Point,
+            divide_by: f32,
+        }
+
+        impl PointTransformer for NormalizeTransformer {
+            fn transform(&self, point: Point) -> Point {
+                (point + self.offset.to_vector()) / self.divide_by
+            }
+        }
+
+        let bounds = self.aabb(true);
+        let size = bounds.max - bounds.min;
+
+        let max_side = size.x.max(size.y);
+
+        // Center the shape if bounds are not a square
+        let offset = ((Point::splat(max_side) - size) / 2.0 - bounds.min).to_point(); /* top */
+
+        self.transformed(NormalizeTransformer { offset, divide_by: max_side })
+    }
+
+    pub fn to_path<P, T: PathBuilder<P>>(&self, path: T, start_angle: Option<f32>, repeat_path: bool, close_path: bool) -> P {
+        path_from_cubics(
+            path,
+            start_angle.unwrap_or(f32::consts::PI * 3.0 / 2.0),
+            repeat_path,
+            close_path,
+            &self.cubics,
+            self.center,
+        )
+        .build()
+    }
+}
+
+fn center_from_vertices(vertices: &[f32]) -> Point {
+    let mut cumulative_x = 0.0;
+    let mut cumulative_y = 0.0;
+    let mut index = 0;
+
+    while index < vertices.len() {
+        let v = vertices[index];
+
+        cumulative_x += v;
+        cumulative_y += v;
+
+        index += 1;
+    }
+
+    Point::new(cumulative_x / (vertices.len() as f32 / 2.0), cumulative_y / (vertices.len() as f32 / 2.0))
+}
+
+#[allow(clippy::manual_is_multiple_of)] // For MSRV compability
+fn custom_polygon(points: &[RoundedPoint], repeats: usize, center: Option<Point>, mirroring: bool) -> RoundedPolygon {
+    let center = center.unwrap_or(Point::new(0.5, 0.5));
+    let mut actual_points = Vec::new();
+
+    if mirroring {
+        let angles = points
+            .iter()
+            .map(|it| (it.offset - center).angle_from_x_axis().to_degrees())
+            .collect::<Vec<_>>();
+        let distances = points.iter().map(|it| (it.offset - center).length()).collect::<Vec<_>>();
+        let actual_repeats = repeats * 2;
+        let section_angle = 360.0 / actual_repeats as f32;
+
+        for iteration in 0..actual_repeats {
+            for index in 0..points.len() {
+                let i = if iteration % 2 == 0 { index } else { points.len() - index - 1 };
+
+                if i > 0 || iteration % 2 == 0 {
+                    let angle = section_angle
+                        .mul_add(
+                            iteration as f32,
+                            if iteration % 2 == 0 {
+                                angles[i]
+                            } else {
+                                2f32.mul_add(angles[0], section_angle - angles[i])
+                            },
+                        )
+                        .to_radians();
+
+                    let final_point = Point::new(angle.cos(), angle.sin()) * distances[i] + center.to_vector();
+
+                    actual_points.push(RoundedPoint {
+                        offset: final_point,
+                        rounding: points[i].rounding,
+                    });
+                }
+            }
+        }
+    } else {
+        let size = points.len();
+
+        for it in 0..size * repeats {
+            let point = points[it % size].offset.rotated((it / size) as f32 * 360.0 / repeats as f32, center);
+
+            actual_points.push(RoundedPoint {
+                offset: point,
+                rounding: points[it % size].rounding,
+            });
+        }
+    }
+
+    RoundedPolygon::from_vertices(
+        &(0..(actual_points.len() * 2))
+            .map(|ix| {
+                let it = actual_points[ix / 2].offset;
+
+                if ix % 2 == 0 { it.x } else { it.y }
+            })
+            .collect::<Vec<_>>(),
+        CornerRounding::UNROUNDED,
+        &actual_points.iter().map(|p| p.rounding).collect::<Vec<_>>(),
+        center,
+    )
+}

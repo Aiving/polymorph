@@ -1,0 +1,250 @@
+use crate::geometry::{Aabb, DISTANCE_EPSILON, GeometryExt, Point, PointTransformer};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Cubic {
+    pub(crate) points: [Point; 4],
+}
+
+impl Cubic {
+    pub const fn new(anchor0: Point, control0: Point, control1: Point, anchor1: Point) -> Self {
+        Self {
+            points: [anchor0, control0, control1, anchor1],
+        }
+    }
+
+    pub fn from_fn<F: FnMut(usize) -> Point>(f: F) -> Self {
+        Self {
+            points: std::array::from_fn(f),
+        }
+    }
+
+    #[must_use]
+    pub fn reverse(mut self) -> Self {
+        self.points.reverse();
+
+        self
+    }
+
+    pub const fn control0(&self) -> Point {
+        self.points[1]
+    }
+
+    pub const fn control1(&self) -> Point {
+        self.points[2]
+    }
+
+    pub const fn anchor0(&self) -> Point {
+        self.points[0]
+    }
+
+    pub const fn anchor1(&self) -> Point {
+        self.points[3]
+    }
+
+    pub fn straight_line(start: Point, end: Point) -> Self {
+        Self {
+            points: [start, start.lerp(end, 1.0 / 3.0), start.lerp(end, 2.0 / 3.0), end],
+        }
+    }
+
+    pub fn circular_arc(center: Point, p0: Point, p1: Point) -> Self {
+        let p0d = (p0 - center).normalize();
+        let p1d = (p1 - center).normalize();
+        let rotated_p0 = p0d.rotate90();
+        let rotated_p1 = p1d.rotate90();
+        let clockwise = rotated_p0.dot(p1 - center) >= 0.0;
+        let cosa = p0d.dot(p1d);
+
+        if cosa > 0.999 {
+            return Self::straight_line(p0, p1);
+        }
+
+        let k = (p0.x - center.x).hypot(p0.y - center.y) * 4.0 / 3.0 * ((2.0 * (1.0 - cosa)).sqrt() - cosa.mul_add(-cosa, 1.0).sqrt()) / (1.0 - cosa)
+            * if clockwise { 1.0 } else { -1.0 };
+
+        Self {
+            points: [p0, p0 + (rotated_p0 * k), p1 + rotated_p1 * -k, p1],
+        }
+    }
+
+    #[must_use]
+    pub fn transformed<T: PointTransformer>(mut self, f: &T) -> Self {
+        self.points = self.points.map(|p| f.transform(p));
+
+        self
+    }
+
+    #[allow(clippy::cognitive_complexity)]
+    pub fn aabb(&self, approximate: bool) -> Aabb {
+        // A curve might be of zero-length, with both anchors co-lated.
+        // Just return the point itself.
+        let anchor0 = self.anchor0();
+
+        if self.zero_length() {
+            return Aabb::new(anchor0, anchor0);
+        }
+
+        let anchor1 = self.anchor1();
+        let control0 = self.control0();
+        let control1 = self.control1();
+
+        let [mut min, mut max] = [anchor0.min(anchor1), anchor0.max(anchor1)];
+
+        if approximate {
+            // Approximate bounds use the bounding box of all anchors and controls
+            return Aabb::new(min.min(control0.min(control1)), min.max(control0.max(control1)));
+        }
+
+        // Find the derivative, which is a quadratic Bezier. Then we can solve for t
+        // using the quadratic formula
+        let xa = 3f32.mul_add(-control1.x, 3f32.mul_add(control0.x, -anchor0.x)) + anchor1.x;
+        let xb = 2f32.mul_add(control1.x, 2f32.mul_add(anchor0.x, -(4.0 * control0.x)));
+        let xc = -anchor0.x + control0.x;
+
+        if xa.abs() < DISTANCE_EPSILON {
+            // Try Muller's method instead; it can find a single root when a is 0
+            if xb != 0.0 {
+                let t = 2.0 * xc / (-2.0 * xb);
+
+                if (0.0..=1.0).contains(&t) {
+                    let value = self.point_on_curve(t).x;
+
+                    if value < min.x {
+                        min.x = value;
+                    }
+
+                    if value > max.x {
+                        max.x = value;
+                    }
+                }
+            }
+        } else {
+            let xs = xb.mul_add(xb, -(4.0 * xa * xc));
+
+            if xs >= 0.0 {
+                let t1 = (-xb + xs.sqrt()) / (2.0 * xa);
+
+                if (0.0..=1.0).contains(&t1) {
+                    let value = self.point_on_curve(t1).x;
+
+                    if value < min.x {
+                        min.x = value;
+                    }
+
+                    if value > max.x {
+                        max.x = value;
+                    }
+                }
+
+                let t2 = (-xb - xs.sqrt()) / (2.0 * xa);
+
+                if (0.0..=1.0).contains(&t2) {
+                    let value = self.point_on_curve(t2).x;
+
+                    if value < min.x {
+                        min.x = value;
+                    }
+
+                    if value > max.x {
+                        max.x = value;
+                    }
+                }
+            }
+        }
+
+        // Repeat the above for y coordinate
+        let ya = 3f32.mul_add(-control1.y, 3f32.mul_add(control0.y, -anchor0.y)) + anchor1.y;
+        let yb = 2f32.mul_add(control1.y, 2f32.mul_add(anchor0.y, -(4.0 * control0.y)));
+        let yc = -anchor0.y + control0.y;
+
+        if ya.abs() < DISTANCE_EPSILON {
+            if yb != 0.0 {
+                let t = 2.0 * yc / (-2.0 * yb);
+
+                if (0.0..=1.0).contains(&t) {
+                    let value = self.point_on_curve(t).y;
+
+                    if value < min.y {
+                        min.y = value;
+                    }
+
+                    if value > max.y {
+                        max.y = value;
+                    }
+                }
+            }
+        } else {
+            let ys = yb.mul_add(yb, -(4.0 * ya * yc));
+
+            if ys >= 0.0 {
+                let t1 = (-yb + ys.sqrt()) / (2.0 * ya);
+
+                if (0.0..=1.0).contains(&t1) {
+                    let value = self.point_on_curve(t1).y;
+
+                    if value < min.y {
+                        min.y = value;
+                    }
+
+                    if value > max.y {
+                        max.y = value;
+                    }
+                }
+
+                let t2 = (-yb - ys.sqrt()) / (2.0 * ya);
+
+                if (0.0..=1.0).contains(&t2) {
+                    let value = self.point_on_curve(t2).y;
+
+                    if value < min.y {
+                        min.y = value;
+                    }
+
+                    if value > max.y {
+                        max.y = value;
+                    }
+                }
+            }
+        }
+
+        Aabb::new(min, max)
+    }
+
+    pub fn zero_length(&self) -> bool {
+        let anchor0 = self.anchor0();
+        let anchor1 = self.anchor1();
+
+        (anchor0.x - anchor1.x).abs() < DISTANCE_EPSILON && (anchor0.y - anchor1.y).abs() < DISTANCE_EPSILON
+    }
+
+    pub fn point_on_curve(&self, t: f32) -> Point {
+        let u = 1.0 - t;
+
+        let [anchor0, control0, control1, anchor1] = self.points;
+
+        (anchor1 * t * t * t) + (control1 * 3.0 * t * t * u).to_vector() + (anchor0 * u * u * u).to_vector() + (control0 * 3.0 * t * u * u).to_vector()
+    }
+
+    pub fn split(self, t: f32) -> (Self, Self) {
+        let u = 1.0 - t;
+        let point_on_curve = self.point_on_curve(t);
+
+        let [anchor0, control0, control1, anchor1] = self.points;
+
+        (
+            Self::new(
+                anchor0,
+                anchor0 * u + (control0 * t).to_vector(),
+                (control1 * t * t) + (anchor0 * u * u).to_vector() + (control0 * (2.0 * u * t)).to_vector(),
+                point_on_curve,
+            ),
+            Self::new(
+                // TODO: should calculate once and share the result
+                point_on_curve,
+                (anchor1 * t * t) + (control0 * u * u).to_vector() + (control1 * (2.0 * u * t)).to_vector(),
+                control1 * u + (anchor1 * t).to_vector(),
+                anchor1,
+            ),
+        )
+    }
+}
