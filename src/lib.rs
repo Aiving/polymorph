@@ -11,6 +11,7 @@ mod measurer;
 mod morph;
 pub mod path;
 mod rounded_polygon;
+pub mod shapes;
 pub(crate) mod util;
 
 pub use self::{

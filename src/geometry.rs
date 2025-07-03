@@ -1,8 +1,10 @@
 use core::f32;
 
+pub type Size = euclid::default::Size2D<f32>;
 pub type Point = euclid::default::Point2D<f32>;
 pub type Vector = euclid::default::Vector2D<f32>;
 pub type Aabb = euclid::default::Box2D<f32>;
+pub type Matrix2 = euclid::default::Transform2D<f32>;
 pub type Matrix3 = euclid::default::Transform3D<f32>;
 pub type Angle = euclid::Angle<f32>;
 
@@ -62,7 +64,7 @@ impl GeometryExt for Vector {
     fn get_direction(&self) -> Self {
         let d = self.length();
 
-        assert!(d > 0.0, "Can't get the direction of a 0-length vector");
+        assert!(d > 0.0, "Can't get the direction of a 0-length vector ({d} {} {self:?})", self.square_length());
 
         *self / d
     }
@@ -82,5 +84,11 @@ pub trait PointTransformer {
 impl<F: Fn(Point) -> Point> PointTransformer for F {
     fn transform(&self, point: Point) -> Point {
         self(point)
+    }
+}
+
+impl PointTransformer for Matrix3 {
+    fn transform(&self, point: Point) -> Point {
+        self.transform_point2d(point).unwrap_or(point)
     }
 }

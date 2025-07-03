@@ -4,9 +4,11 @@ use crate::{
     Cubic, DoubleMapper, MeasuredPolygon, RoundedPolygon,
     geometry::ANGLE_EPSILON,
     measurer::LengthMeasurer,
-    path::{PathBuilder, path_from_cubics},
+    path::{PathBuilder, add_cubics},
 };
 
+/// A structure designed to obtain transition cubics between the start and end
+/// [`RoundedPolygon`]s.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Morph {
     start: RoundedPolygon,
@@ -15,12 +17,20 @@ pub struct Morph {
 }
 
 impl Morph {
+    /// Matches the [`Cubic`]s of the start and end [`RoundedPolygon`]s, then
+    /// returns an instance of [`Morph`].
+    ///
+    /// # Panics
+    ///
+    /// May panic if not all cubics of both polygons have been matched.
     pub fn new(start: RoundedPolygon, end: RoundedPolygon) -> Self {
         let r#match = Self::match_morph(&start, &end);
 
         Self { start, end, r#match }
     }
 
+    /// Returns the transition state between the start and end polygons at a
+    /// given `progress` value represented as a list of [`Cubic`]s.
     pub fn as_cubics(&self, progress: f32) -> Vec<Cubic> {
         let mut cubics = Vec::new();
 
@@ -60,24 +70,26 @@ impl Morph {
         cubics
     }
 
-    pub fn to_path<O, T: PathBuilder<O>>(&self, progress: f32, path: T, start_angle: Option<f32>, repeat_path: bool, close_path: bool) -> O {
-        let cubics = self.as_cubics(progress);
+    /// Returns a path with a drawn transition state (based on the provided
+    /// `progress`). Path is created using the provided `T`, which should
+    /// implement `PathBuilder` and `Default` traits.
+    pub fn as_path<T: PathBuilder + Default>(&self, progress: f32, repeat_path: bool, close_path: bool) -> T::Path {
+        let mut path = T::default();
 
-        path_from_cubics(
-            path,
-            start_angle.unwrap_or(f32::consts::PI * 3.0 / 2.0),
-            repeat_path,
-            close_path,
-            &cubics,
-            (self.start.center + self.end.center.to_vector()) / 2.0,
-        )
-        .build()
+        self.add_to(progress, &mut path, repeat_path, close_path);
+
+        path.build()
     }
 
-    /// # Panics
-    ///
-    /// May panic if not all cubics of each polygon have been processed.
-    pub fn match_morph(p1: &RoundedPolygon, p2: &RoundedPolygon) -> Vec<(Cubic, Cubic)> {
+    /// Adds a transition state (based on the provided `progress`) to the
+    /// `builder`.
+    pub fn add_to<T: PathBuilder>(&self, progress: f32, builder: &mut T, repeat_path: bool, close_path: bool) {
+        let cubics = self.as_cubics(progress);
+
+        add_cubics(builder, repeat_path, close_path, &cubics);
+    }
+
+    fn match_morph(p1: &RoundedPolygon, p2: &RoundedPolygon) -> Vec<(Cubic, Cubic)> {
         // Measure polygons, returns lists of measured cubics for each polygon, which
         // we then use to match start/end curves
         let measured_polygon1 = MeasuredPolygon::measure_polygon(LengthMeasurer, p1);

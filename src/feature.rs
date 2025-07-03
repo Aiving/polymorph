@@ -6,6 +6,13 @@ pub enum FeatureType {
     Corner { convex: bool },
 }
 
+/// While a polygon's shape can be drawn solely using a list of [`Cubic`]
+/// objects representing its raw curves and lines, features add an extra layer
+/// of context to groups of cubics.
+///
+/// Features group cubics into (straight) edges, convex corners, or concave
+/// corners. For example, rounding a rectangle adds many cubics around its
+/// edges, but the rectangle's overall number of corners remains the same.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Feature {
     pub ty: FeatureType,
@@ -24,6 +31,8 @@ impl Feature {
         }
     }
 
+    /// Returns a [`Feature`] with cubics transformed using the provided
+    /// reference to type that implements [`PointTransformer`] trait.
     #[must_use]
     pub fn transformed<T: PointTransformer>(self, f: &T) -> Self {
         match self.ty {
@@ -38,10 +47,13 @@ impl Feature {
         }
     }
 
+    /// Returns `true` if the feature type is corner.
     pub const fn is_corner(&self) -> bool {
         matches!(self.ty, FeatureType::Corner { .. })
     }
 
+    /// Returns the result of calling `func` if the type of feature is an angle
+    /// and passed to `func`, otherwise returning `false`.
     pub fn is_corner_and<F: FnOnce(bool) -> bool>(&self, func: F) -> bool {
         if let FeatureType::Corner { convex } = &self.ty {
             func(*convex)

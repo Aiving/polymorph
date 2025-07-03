@@ -1,5 +1,7 @@
 use crate::geometry::{Aabb, DISTANCE_EPSILON, GeometryExt, Point, PointTransformer};
 
+/// Contains 4 points forming a cubic Bézier curve: 2 anchor points at the start
+/// and end, and 2 control points between them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cubic {
     pub(crate) points: [Point; 4],
@@ -18,8 +20,10 @@ impl Cubic {
         }
     }
 
+    /// Returns a cubic Bézier curve with points swapped (anchor with anchor and
+    /// control with control).
     #[must_use]
-    pub fn reverse(mut self) -> Self {
+    pub fn reversed(mut self) -> Self {
         self.points.reverse();
 
         self
@@ -41,12 +45,14 @@ impl Cubic {
         self.points[3]
     }
 
+    /// Returns a cubic Bézier curve that forms a straight line.
     pub fn straight_line(start: Point, end: Point) -> Self {
         Self {
             points: [start, start.lerp(end, 1.0 / 3.0), start.lerp(end, 2.0 / 3.0), end],
         }
     }
 
+    /// Returns a cubic Bézier curve that forms a circular arc.
     pub fn circular_arc(center: Point, p0: Point, p1: Point) -> Self {
         let p0d = (p0 - center).normalize();
         let p1d = (p1 - center).normalize();
@@ -67,6 +73,8 @@ impl Cubic {
         }
     }
 
+    /// Returns a cubic Bézier curve with points transformed using the provided
+    /// reference to type that implements [`PointTransformer`] trait.
     #[must_use]
     pub fn transformed<T: PointTransformer>(mut self, f: &T) -> Self {
         self.points = self.points.map(|p| f.transform(p));
@@ -74,6 +82,11 @@ impl Cubic {
         self
     }
 
+    /// Returns an axis-aligned bounding box describing bounds of the curve.
+    ///
+    /// If `approximate` is `true`, a fast but sometimes inaccurate algorithm is
+    /// used. Otherwise, it finds the derivative, which is a quadratic Bézier
+    /// curve, and then solves the equation for `t` using the quadratic formula.
     #[allow(clippy::cognitive_complexity)]
     pub fn aabb(&self, approximate: bool) -> Aabb {
         let anchor0 = self.anchor0();
@@ -92,7 +105,7 @@ impl Cubic {
 
         if approximate {
             // Approximate bounds use the bounding box of all anchors and controls
-            return Aabb::new(min.min(control0.min(control1)), min.max(control0.max(control1)));
+            return Aabb::new(min.min(control0.min(control1)), max.max(control0.max(control1)));
         }
 
         // Find the derivative, which is a quadratic Bezier. Then we can solve for t
@@ -210,6 +223,7 @@ impl Cubic {
         Aabb::new(min, max)
     }
 
+    /// Returns `true` if the length between anchor points is zero.
     pub fn zero_length(&self) -> bool {
         let anchor0 = self.anchor0();
         let anchor1 = self.anchor1();
@@ -217,6 +231,9 @@ impl Cubic {
         (anchor0.x - anchor1.x).abs() < DISTANCE_EPSILON && (anchor0.y - anchor1.y).abs() < DISTANCE_EPSILON
     }
 
+    /// Returns a point on the curve for parameter `t`, representing the
+    /// proportional distance along the curve between its starting anchor and
+    /// ending anchor point.
     pub fn point_on_curve(&self, t: f32) -> Point {
         let u = 1.0 - t;
 
@@ -225,6 +242,8 @@ impl Cubic {
         (anchor1 * t * t * t) + (control1 * 3.0 * t * t * u).to_vector() + (anchor0 * u * u * u).to_vector() + (control0 * 3.0 * t * u * u).to_vector()
     }
 
+    /// Returns two [`Cubic`]s, created by splitting this curve at the given
+    /// distance of `t` between the original starting and ending anchor points.
     pub fn split(self, t: f32) -> (Self, Self) {
         let u = 1.0 - t;
         let point_on_curve = self.point_on_curve(t);

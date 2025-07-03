@@ -1,7 +1,7 @@
 [package]
 name = "polymorpher"
 description = "Library for creating and morphing potentially rounded polygons"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 documentation = "https://docs.rs/polymorpher"
 homepage = "https://github.com/Aiving/polymorpher"
