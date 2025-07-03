@@ -16,7 +16,7 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - name: Run clippy
-        run: cargo clippy --all-targets -F lyon -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
       - name: Run rustfmt
         run: cargo fmt --all --check
   test:
@@ -26,7 +26,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - name: Run tests
-        run: cargo test --all-targets -F lyon
+        run: cargo test --all-targets
   docs:
     runs-on: ubuntu-latest
     steps:
@@ -36,7 +36,7 @@ jobs:
           components: rustfmt, rust-src
       - uses: Swatinem/rust-cache@v2
       - name: Build Documentation
-        run: cargo doc --document-private-items -F lyon --no-deps
+        run: cargo doc --document-private-items --no-deps
       - name: Deploy Docs
         uses: peaceiris/actions-gh-pages@v4
         with:
