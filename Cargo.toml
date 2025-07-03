@@ -3,6 +3,14 @@ name = "polymorpher"
 description = "Library for creating and morphing potentially rounded polygons"
 version = "0.1.0"
 edition = "2024"
+documentation = "https://docs.rs/material-colors"
+homepage = "https://github.com/Aiving/material-colors"
+repository = "https://github.com/Aiving/material-colors.git"
+readme = "README.md"
+license = "Apache-2.0"
+keywords = ["graphics", "2d", "shape", "polygon"]
+categories = ["graphics"]
+rust-version = "1.85.1"
 
 [dependencies]
 euclid = "0.22.11"
@@ -13,6 +21,12 @@ lyon_tessellation = { version = "1.0.15", optional = true }
 default = []
 skia = ["dep:skia-safe"]
 lyon = ["dep:lyon_tessellation"]
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
 
 [lints.clippy]
 all = "warn"
