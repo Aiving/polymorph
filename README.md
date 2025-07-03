@@ -1,6 +1,8 @@
 # Polymorph
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Aiving/material-colors/CI.yml.svg?style=for-the-badge)](https://github.com/Aiving/polymorph/actions)
+[![crates.io: polymorph](https://img.shields.io/crates/v/polymorph.svg?style=for-the-badge)](https://crates.io/crates/polymorph)
+[![Documentation](https://img.shields.io/docsrs/polymorph.svg?style=for-the-badge)](https://docs.rs/polymorph)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Aiving/polymorph/CI.yml.svg?style=for-the-badge)](https://github.com/Aiving/polymorph/actions)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-634f7d.svg?style=for-the-badge)](LICENSE)
 
 A library for creating and morphing potentially rounded polygons. Based on the [Kotlin implementation](https://android.googlesource.com/platform/frameworks/support/+/refs/heads/androidx-main/graphics/graphics-shapes) of [Shape Morph from M3 Expressive](https://m3.material.io/styles/shape/shape-morph).
