@@ -137,7 +137,7 @@ impl Morph {
             let b2a = if i2 == bs2.cubics.len() {
                 1.0
             } else {
-                positive_modulo(double_mapper.map_back(bb2.end_outline_progress + polygon2_cut_point), 1.0)
+                double_mapper.map_back(positive_modulo(bb2.end_outline_progress + polygon2_cut_point, 1.0))
             };
             let minb = b1a.min(b2a);
 

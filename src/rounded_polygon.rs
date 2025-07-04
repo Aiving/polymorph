@@ -426,10 +426,8 @@ impl RoundedPolygon {
     ///
     /// May panic if:
     /// - The polygon contains fewer than 3 vertices
-    /// - The size of the `vertices` is odd
     /// - The `per_vertex_rounding` is not empty, but its size does not
-    ///   correspond to the number of vertices in the polygon (`vertices.len() /
-    ///   2`)
+    ///   correspond to the number of vertices in the polygon
     pub fn from_vertices(vertices: &[Point], rounding: CornerRounding, per_vertex_rounding: &[CornerRounding], center: Point) -> Self {
         assert!(vertices.len() >= 3, "Polygons must have at least 3 vertices");
         assert!(
