@@ -12,6 +12,7 @@ pub trait Measurer {
     fn find_cubic_cut_point(&self, c: &Cubic, m: f32) -> f32;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LengthMeasurer;
 
 impl LengthMeasurer {
@@ -24,6 +25,7 @@ impl LengthMeasurer {
 
         for i in 1..=Self::SEGMENTS {
             let progress = i as f32 / Self::SEGMENTS as f32;
+
             let point = cubic.point_on_curve(progress);
             let segment = (point - prev).length();
 

@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{cubic::Cubic, geometry::PointTransformer};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -59,6 +61,26 @@ impl Feature {
             func(*convex)
         } else {
             false
+        }
+    }
+}
+
+impl fmt::Display for Feature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.ty {
+            FeatureType::Edge => write!(f, "Edge"),
+            FeatureType::Corner { convex } => f.write_fmt(core::format_args!(
+                "Corner: cubics={} convex={convex}",
+                self.cubics.iter().fold(String::new(), |mut data, cubic| {
+                    if !data.is_empty() {
+                        data.push_str(", ");
+                    }
+
+                    data.push_str(&cubic.to_string());
+
+                    data
+                })
+            )),
         }
     }
 }

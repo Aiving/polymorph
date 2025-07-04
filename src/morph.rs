@@ -5,6 +5,7 @@ use crate::{
     geometry::ANGLE_EPSILON,
     measurer::LengthMeasurer,
     path::{PathBuilder, add_cubics},
+    util::positive_modulo,
 };
 
 /// A structure designed to obtain transition cubics between the start and end
@@ -95,6 +96,19 @@ impl Morph {
         let measured_polygon1 = MeasuredPolygon::measure_polygon(LengthMeasurer, p1);
         let measured_polygon2 = MeasuredPolygon::measure_polygon(LengthMeasurer, p2);
 
+        println!(
+            "[{}]",
+            measured_polygon1.features.iter().fold(String::new(), |mut data, feature| {
+                if !data.is_empty() {
+                    data.push_str(", ");
+                }
+
+                data.push_str(&feature.to_string());
+
+                data
+            })
+        );
+
         // features1 and 2 will contain the list of corners (just the inner circular
         // curve) along with the progress at the middle of those corners. These
         // measurement values are then used to compare and match between the two
@@ -117,11 +131,16 @@ impl Morph {
         let mut ret = <Vec<(Cubic, Cubic)>>::new();
         // i1/i2 are the indices of the current cubic on the start (1) and end (2)
         // shapes
-        let mut i1 = 1;
-        let mut i2 = 1;
+        let mut i1 = 0;
+        let mut i2 = 0;
         // b1, b2 are the current measured cubic for each polygon
         let mut b1 = bs1.cubics.get(i1).copied();
+
+        i1 += 1;
+
         let mut b2 = bs2.cubics.get(i2).copied();
+
+        i2 += 1;
 
         // Iterate until all curves are accounted for and matched
         while let (Some(bb1), Some(bb2)) = (b1.take(), b2.take()) {
@@ -131,9 +150,11 @@ impl Morph {
             let b2a = if i2 == bs2.cubics.len() {
                 1.0
             } else {
-                double_mapper.map_back((bb2.end_outline_progress + polygon2_cut_point).rem_euclid(1.0))
+                positive_modulo(double_mapper.map_back(bb2.end_outline_progress + polygon2_cut_point), 1.0)
             };
             let minb = b1a.min(b2a);
+
+            println!("{b1a} {b2a} | {minb}");
 
             // min b is the progress at which the curve that ends first ends.
             // If both curves ends roughly there, no cutting is needed, we have a match.
@@ -151,7 +172,7 @@ impl Morph {
             };
 
             let (seg2, newb2) = if b2a > minb + ANGLE_EPSILON {
-                let (a, b) = bb2.cut_at_progress(&bs2.measurer, (double_mapper.map(minb) - polygon2_cut_point).rem_euclid(1.0));
+                let (a, b) = bb2.cut_at_progress(&bs2.measurer, positive_modulo(double_mapper.map(minb) - polygon2_cut_point, 1.0));
 
                 (a, Some(b))
             } else {
@@ -169,6 +190,23 @@ impl Morph {
         }
 
         assert!(b1.is_none() && b2.is_none(), "Expected both Polygon's Cubic to be fully matched");
+
+        println!(
+            "[{}]",
+            ret.iter().fold(String::new(), |mut data, cubic| {
+                if !data.is_empty() {
+                    data.push_str(", ");
+                }
+
+                data.push('(');
+                data.push_str(&cubic.0.to_string());
+                data.push_str(", ");
+                data.push_str(&cubic.1.to_string());
+                data.push(')');
+
+                data
+            })
+        );
 
         ret
     }

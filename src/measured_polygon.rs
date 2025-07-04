@@ -1,4 +1,6 @@
-use crate::{Cubic, Feature, Measurer, RoundedPolygon, geometry::DISTANCE_EPSILON};
+use std::fmt;
+
+use crate::{Cubic, Feature, Measurer, RoundedPolygon, geometry::DISTANCE_EPSILON, util::positive_modulo};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MeasuredCubic {
@@ -50,6 +52,13 @@ pub struct ProgressableFeature {
     pub feature: Feature,
 }
 
+impl fmt::Display for ProgressableFeature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ProgressableFeature(progress={}, feature={})", self.progress, self.feature)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct MeasuredPolygon<T: Measurer> {
     pub(crate) measurer: T,
     pub(crate) cubics: Vec<MeasuredCubic>,
@@ -125,7 +134,7 @@ impl<T: Measurer> MeasuredPolygon<T> {
 
         for (feature, ix) in feature_to_cubic {
             features.push(ProgressableFeature {
-                progress: outline_progress[ix].midpoint(outline_progress[ix + 1]).rem_euclid(1.0),
+                progress: positive_modulo(outline_progress[ix].midpoint(outline_progress[ix + 1]), 1.0),
                 feature: feature.clone(),
             });
         }
@@ -185,7 +194,7 @@ impl<T: Measurer> MeasuredPolygon<T> {
                 _ => {
                     let cubic_index = (target_index + index - 1) % self.cubics.len();
 
-                    (self.cubics[cubic_index].end_outline_progress - cutting_point).rem_euclid(1.0)
+                    positive_modulo(self.cubics[cubic_index].end_outline_progress - cutting_point, 1.0)
                 }
             });
         }
@@ -195,7 +204,7 @@ impl<T: Measurer> MeasuredPolygon<T> {
 
         for i in 0..self.features.len() {
             new_features.push(ProgressableFeature {
-                progress: (self.features[i].progress - cutting_point).rem_euclid(1.0),
+                progress: positive_modulo(self.features[i].progress - cutting_point, 1.0),
                 feature: self.features[i].feature.clone(),
             });
         }

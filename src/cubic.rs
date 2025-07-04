@@ -1,3 +1,8 @@
+use std::{
+    fmt,
+    ops::{Add, Div, Mul},
+};
+
 use crate::geometry::{Aabb, DISTANCE_EPSILON, GeometryExt, Point, PointTransformer};
 
 /// Contains 4 points forming a cubic Bézier curve: 2 anchor points at the start
@@ -237,9 +242,10 @@ impl Cubic {
     pub fn point_on_curve(&self, t: f32) -> Point {
         let u = 1.0 - t;
 
-        let [anchor0, control0, control1, anchor1] = self.points;
-
-        (anchor1 * t * t * t) + (control1 * 3.0 * t * t * u).to_vector() + (anchor0 * u * u * u).to_vector() + (control0 * 3.0 * t * u * u).to_vector()
+        self.anchor0() * (u * u * u)
+            + (self.control0() * (3.0 * t * u * u)).to_vector()
+            + (self.control1() * (3.0 * t * t * u)).to_vector()
+            + (self.anchor1() * (t * t * t)).to_vector()
     }
 
     /// Returns two [`Cubic`]s, created by splitting this curve at the given
@@ -265,5 +271,53 @@ impl Cubic {
                 anchor1,
             ),
         )
+    }
+}
+
+impl fmt::Display for Cubic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "anchor0: {:?} control0: {:?}, control1: {:?}, anchor1: {:?}",
+            self.anchor0(),
+            self.control0(),
+            self.control1(),
+            self.anchor1()
+        )
+    }
+}
+
+impl Add for Cubic {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            points: [
+                self.points[0] + rhs.points[0].to_vector(),
+                self.points[1] + rhs.points[1].to_vector(),
+                self.points[2] + rhs.points[2].to_vector(),
+                self.points[3] + rhs.points[3].to_vector(),
+            ],
+        }
+    }
+}
+
+impl Mul<f32> for Cubic {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self {
+            points: self.points.map(|point| point * rhs),
+        }
+    }
+}
+
+impl Div<f32> for Cubic {
+    type Output = Self;
+
+    fn div(self, rhs: f32) -> Self::Output {
+        Self {
+            points: self.points.map(|point| point / rhs),
+        }
     }
 }

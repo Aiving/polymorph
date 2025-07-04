@@ -1,6 +1,6 @@
 use crate::{
     geometry::DISTANCE_EPSILON,
-    util::{progress_distance, progress_in_range},
+    util::{positive_modulo, progress_distance, progress_in_range},
 };
 
 pub struct DoubleMapper {
@@ -64,13 +64,13 @@ fn linear_map(x_values: &[f32], y_values: &[f32], x: f32) -> f32 {
         .unwrap_or_default();
 
     let segment_end_index = (segment_start_index + 1) % x_values.len();
-    let segment_size_x = (x_values[segment_end_index] - x_values[segment_start_index]).rem_euclid(1.0);
-    let segment_size_y = (y_values[segment_end_index] - y_values[segment_start_index]).rem_euclid(1.0);
+    let segment_size_x = positive_modulo(x_values[segment_end_index] - x_values[segment_start_index], 1.0);
+    let segment_size_y = positive_modulo(y_values[segment_end_index] - y_values[segment_start_index], 1.0);
     let position_in_segment = if segment_size_x < 0.001 {
         0.5
     } else {
-        (x - x_values[segment_start_index]).rem_euclid(1.0) / segment_size_x
+        positive_modulo(x - x_values[segment_start_index], 1.0) / segment_size_x
     };
 
-    segment_size_y.mul_add(position_in_segment, y_values[segment_start_index]).rem_euclid(1.0)
+    positive_modulo(segment_size_y.mul_add(position_in_segment, y_values[segment_start_index]), 1.0)
 }

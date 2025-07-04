@@ -1,7 +1,11 @@
 use core::f32;
 
 use crate::{
-    geometry::{Aabb, GeometryExt, Point, PointTransformer, Size, Vector}, path::{add_cubics, PathBuilder}, polygon_builder::{Circle, Pill, PillStar, Rectangle, Star}, util::radial_to_cartesian, Cubic, Feature, RoundedPolygonBuilder
+    Cubic, Feature, RoundedPolygonBuilder,
+    geometry::{Aabb, GeometryExt, Point, PointTransformer, Size, Vector},
+    path::{PathBuilder, add_cubics},
+    polygon_builder::{Circle, Pill, PillStar, Rectangle, Star},
+    util::radial_to_cartesian,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -245,8 +249,8 @@ impl RoundedCorner {
 /// ordered list of vertices.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RoundedPolygon {
-    pub(crate) features: Vec<Feature>,
-    pub(crate) center: Point,
+    pub features: Vec<Feature>,
+    pub center: Point,
     /// A flattened version of the [`Feature`]s.
     pub cubics: Vec<Cubic>,
 }
@@ -326,6 +330,27 @@ impl RoundedPolygon {
         Self { features, center, cubics }
     }
 
+    pub fn from_features(features: Vec<Feature>, center: Option<Point>) -> Self {
+        let center = center.unwrap_or_else(|| Point::splat(f32::NAN));
+        let vertices = features
+            .iter()
+            .flat_map(|feature| feature.cubics.iter().flat_map(|cubic| [cubic.anchor0().x, cubic.anchor0().y]))
+            .collect::<Vec<_>>();
+
+        let center = if center.x.is_nan() || center.y.is_nan() {
+            let center_from_verts = center_from_vertices(&vertices);
+
+            Point::new(
+                if center.x.is_nan() { center_from_verts.x } else { center.x },
+                if center.y.is_nan() { center_from_verts.y } else { center.y },
+            )
+        } else {
+            center
+        };
+
+        Self::new(features, center)
+    }
+
     fn builder<D>(data: D) -> RoundedPolygonBuilder<D> {
         RoundedPolygonBuilder {
             data,
@@ -379,7 +404,7 @@ impl RoundedPolygon {
     }
 
     pub fn from_vertices_count(vertices: usize, radius: f32, rounding: Option<CornerRounding>, per_vertex_rounding: &[CornerRounding]) -> Self {
-        Self::from_vertices_count_at(vertices, radius, Point::splat(0.5), rounding, per_vertex_rounding)
+        Self::from_vertices_count_at(vertices, radius, Point::zero(), rounding, per_vertex_rounding)
     }
 
     pub fn from_vertices_count_at(
@@ -523,7 +548,12 @@ impl RoundedPolygon {
         let mut aabb = Aabb::new(Point::splat(f32::MAX), Point::splat(f32::MIN));
 
         for cubic in &self.cubics {
-            aabb = aabb.union(&cubic.aabb(approximate));
+            let cubic_aabb = cubic.aabb(approximate);
+
+            aabb = Aabb {
+                min: aabb.min.min(cubic_aabb.min),
+                max: aabb.max.max(cubic_aabb.max),
+            };
         }
 
         aabb
@@ -565,11 +595,10 @@ fn center_from_vertices(vertices: &[f32]) -> Point {
     let mut index = 0;
 
     while index < vertices.len() {
-        let v = vertices[index];
+        cumulative_x += vertices[index];
+        index += 1;
 
-        cumulative_x += v;
-        cumulative_y += v;
-
+        cumulative_y += vertices[index];
         index += 1;
     }
 

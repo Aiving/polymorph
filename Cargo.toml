@@ -33,3 +33,6 @@ all = "warn"
 nursery = "warn"
 pedantic = "warn"
 must_use_candidate = { level = "allow", priority = 1 }
+
+[dev-dependencies]
+float-cmp = "0.10.0"

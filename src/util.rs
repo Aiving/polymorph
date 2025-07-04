@@ -17,3 +17,7 @@ pub fn progress_distance(p1: f32, p2: f32) -> f32 {
 pub fn radial_to_cartesian(radius: f32, angle_radians: f32) -> Vector {
     Vector::new(angle_radians.cos(), angle_radians.sin()) * radius
 }
+
+pub fn positive_modulo(num: f32, modulo: f32) -> f32 {
+    (num % modulo + modulo) % modulo
+}
