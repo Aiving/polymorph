@@ -96,19 +96,6 @@ impl Morph {
         let measured_polygon1 = MeasuredPolygon::measure_polygon(LengthMeasurer, p1);
         let measured_polygon2 = MeasuredPolygon::measure_polygon(LengthMeasurer, p2);
 
-        println!(
-            "[{}]",
-            measured_polygon1.features.iter().fold(String::new(), |mut data, feature| {
-                if !data.is_empty() {
-                    data.push_str(", ");
-                }
-
-                data.push_str(&feature.to_string());
-
-                data
-            })
-        );
-
         // features1 and 2 will contain the list of corners (just the inner circular
         // curve) along with the progress at the middle of those corners. These
         // measurement values are then used to compare and match between the two
@@ -154,8 +141,6 @@ impl Morph {
             };
             let minb = b1a.min(b2a);
 
-            println!("{b1a} {b2a} | {minb}");
-
             // min b is the progress at which the curve that ends first ends.
             // If both curves ends roughly there, no cutting is needed, we have a match.
             // If one curve extends beyond, we need to cut it.
@@ -190,23 +175,6 @@ impl Morph {
         }
 
         assert!(b1.is_none() && b2.is_none(), "Expected both Polygon's Cubic to be fully matched");
-
-        println!(
-            "[{}]",
-            ret.iter().fold(String::new(), |mut data, cubic| {
-                if !data.is_empty() {
-                    data.push_str(", ");
-                }
-
-                data.push('(');
-                data.push_str(&cubic.0.to_string());
-                data.push_str(", ");
-                data.push_str(&cubic.1.to_string());
-                data.push(')');
-
-                data
-            })
-        );
 
         ret
     }

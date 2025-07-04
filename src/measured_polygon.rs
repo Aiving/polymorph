@@ -1,5 +1,3 @@
-use std::fmt;
-
 use crate::{Cubic, Feature, Measurer, RoundedPolygon, geometry::DISTANCE_EPSILON, util::positive_modulo};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -50,12 +48,6 @@ impl MeasuredCubic {
 pub struct ProgressableFeature {
     pub progress: f32,
     pub feature: Feature,
-}
-
-impl fmt::Display for ProgressableFeature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ProgressableFeature(progress={}, feature={})", self.progress, self.feature)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

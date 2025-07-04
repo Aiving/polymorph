@@ -182,8 +182,6 @@ impl RoundedPolygonBuilder<Rectangle> {
 
         let vertices = [right, bottom, left, bottom, left, top, right, top];
 
-        println!("{vertices:#?}");
-
         RoundedPolygon::from_vertices(&vertices, self.rounding, &self.per_vertex_rounding, self.center)
     }
 }

@@ -1,7 +1,4 @@
-use std::{
-    fmt,
-    ops::{Add, Div, Mul},
-};
+use std::ops::{Add, Div, Mul};
 
 use crate::geometry::{Aabb, DISTANCE_EPSILON, GeometryExt, Point, PointTransformer};
 
@@ -270,19 +267,6 @@ impl Cubic {
                 control1 * u + (anchor1 * t).to_vector(),
                 anchor1,
             ),
-        )
-    }
-}
-
-impl fmt::Display for Cubic {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "anchor0: {:?} control0: {:?}, control1: {:?}, anchor1: {:?}",
-            self.anchor0(),
-            self.control0(),
-            self.control1(),
-            self.anchor1()
         )
     }
 }
