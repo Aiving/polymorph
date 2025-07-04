@@ -16,16 +16,16 @@ A library for creating and morphing potentially rounded polygons. Based on the [
 
 ```rust
 use lyon::path::Path;
-use polymorpher::{
-    CornerRounding, RoundedPoint, RoundedPolygon,
-    geometry::Point, path::PathBuilder,
+use crate::{
+    CornerRounding, RoundedPoint,
+    RoundedPolygon, geometry::Point
 };
 
 let path = RoundedPolygon::from_points(
     &[
         RoundedPoint::new(
             Point::new(0.499, 1.023),
-            CornerRounding::smoothed(0.241, 0.778),
+            CornerRounding::smoothed(0.241, 0.778)
         ),
         RoundedPoint::new(
             Point::new(-0.005, 0.792),
@@ -45,7 +45,7 @@ let path = RoundedPolygon::from_points(
 )
 .normalized()
 .transformed(|point| point * 128.0)
-.to_path(Path::builder(), None, false, false);
+.as_path::<Path>(false, true);
 
 // Render it however you want!
 ```
