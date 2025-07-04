@@ -1,9 +1,7 @@
 use core::f32;
 
 use crate::{
-    Cubic, Feature,
-    geometry::{Aabb, GeometryExt, Point, PointTransformer, Size, Vector},
-    path::{PathBuilder, add_cubics},
+    geometry::{Aabb, GeometryExt, Point, PointTransformer, Size, Vector}, path::{add_cubics, PathBuilder}, polygon_builder::{Circle, Pill, PillStar, Rectangle, Star}, util::radial_to_cartesian, Cubic, Feature, RoundedPolygonBuilder
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -328,6 +326,50 @@ impl RoundedPolygon {
         Self { features, center, cubics }
     }
 
+    fn builder<D>(data: D) -> RoundedPolygonBuilder<D> {
+        RoundedPolygonBuilder {
+            data,
+            center: Point::zero(),
+            rounding: CornerRounding::UNROUNDED,
+            per_vertex_rounding: Vec::new(),
+        }
+    }
+
+    pub fn circle() -> RoundedPolygonBuilder<Circle> {
+        Self::builder(Circle { vertices: 8, radius: 1.0 })
+    }
+
+    pub fn rectangle() -> RoundedPolygonBuilder<Rectangle> {
+        Self::builder(Rectangle { size: Size::splat(2.0) })
+    }
+
+    pub fn star(vertices_per_radius: usize) -> RoundedPolygonBuilder<Star> {
+        Self::builder(Star {
+            vertices_per_radius,
+            radius: 1.0,
+            inner_radius: 0.5,
+            inner_rounding: None,
+        })
+    }
+
+    pub fn pill() -> RoundedPolygonBuilder<Pill> {
+        Self::builder(Pill {
+            size: Size::new(2.0, 1.0),
+            smoothing: 0.0,
+        })
+    }
+
+    pub fn pill_star() -> RoundedPolygonBuilder<PillStar> {
+        Self::builder(PillStar {
+            size: Size::new(2.0, 1.0),
+            vertices_per_radius: 8,
+            inner_radius_ratio: 0.5,
+            inner_rounding: None,
+            vertex_spacing: 0.5,
+            start_location: 0.0,
+        })
+    }
+
     pub fn from_points(points: &[RoundedPoint], repeats: usize, mirroring: bool) -> Self {
         custom_polygon(points, repeats, None, mirroring)
     }
@@ -353,167 +395,6 @@ impl RoundedPolygon {
             per_vertex_rounding,
             center,
         )
-    }
-
-    pub fn rectangle(size: Size, rounding: Option<CornerRounding>, per_vertex_rounding: Option<[CornerRounding; 4]>) -> Self {
-        Self::rectangle_at(size, rounding, per_vertex_rounding, Point::zero())
-    }
-
-    pub fn rectangle_at(size: Size, rounding: Option<CornerRounding>, per_vertex_rounding: Option<[CornerRounding; 4]>, center: Point) -> Self {
-        let left = center.x - size.width / 2.0;
-        let top = center.y - size.height / 2.0;
-        let right = center.x + size.width / 2.0;
-        let bottom = center.y + size.height / 2.0;
-
-        let vertices = [right, bottom, left, bottom, left, top, right, top];
-
-        per_vertex_rounding.map_or_else(
-            || Self::from_vertices(&vertices, rounding.unwrap_or(CornerRounding::UNROUNDED), &[], center),
-            |per_vertex_rounding| Self::from_vertices(&vertices, rounding.unwrap_or(CornerRounding::UNROUNDED), &per_vertex_rounding, center),
-        )
-    }
-
-    pub fn circle(vertices: usize, radius: f32) -> Self {
-        Self::circle_at(vertices, radius, Point::zero())
-    }
-
-    pub fn circle_at(vertices: usize, radius: f32, center: Point) -> Self {
-        let theta = f32::consts::PI / vertices as f32;
-        let polygon_radius = radius / theta.cos();
-
-        Self::from_vertices_count_at(vertices, polygon_radius, center, Some(CornerRounding::new(radius)), &[])
-    }
-
-    pub fn star(
-        vertices_per_radius: usize,
-        radius: f32,
-        inner_radius: f32,
-        rounding: Option<CornerRounding>,
-        inner_rounding: Option<CornerRounding>,
-        per_vertex_rounding: &[CornerRounding],
-    ) -> Self {
-        Self::star_at(
-            vertices_per_radius,
-            radius,
-            inner_radius,
-            rounding,
-            inner_rounding,
-            per_vertex_rounding,
-            Point::zero(),
-        )
-    }
-
-    pub fn star_at(
-        vertices_per_radius: usize,
-        radius: f32,
-        inner_radius: f32,
-        rounding: Option<CornerRounding>,
-        inner_rounding: Option<CornerRounding>,
-        per_vertex_rounding: &[CornerRounding],
-        center: Point,
-    ) -> Self {
-        let rounding = rounding.unwrap_or(CornerRounding::UNROUNDED);
-
-        let vertices = star_vertices_from_num_verts(vertices_per_radius, radius, inner_radius, center);
-
-        // Star polygon is just a polygon with all vertices supplied (where we generate
-        // those vertices to be on the inner/outer radii)
-        if !per_vertex_rounding.is_empty() {
-            Self::from_vertices(&vertices, rounding, per_vertex_rounding, center)
-        } else if let Some(inner_rounding) = inner_rounding {
-            // If no per-vertex rounding supplied and caller asked for inner
-            // rounding, create per-vertex rounding list based on
-            // supplied outer/inner rounding parameters
-            Self::from_vertices(
-                &vertices,
-                rounding,
-                &(0..vertices_per_radius).flat_map(|_| [rounding, inner_rounding]).collect::<Vec<_>>(),
-                center,
-            )
-        } else {
-            Self::from_vertices(&vertices, rounding, &[], center)
-        }
-    }
-
-    pub fn pill(size: Size, smoothing: f32) -> Self {
-        Self::pill_at(size, smoothing, Point::zero())
-    }
-
-    pub fn pill_at(size: Size, smoothing: f32, center: Point) -> Self {
-        let half_size = size / 2.0;
-
-        Self::from_vertices(
-            &[
-                half_size.width + center.x,
-                half_size.height + center.y,
-                -half_size.width + center.x,
-                half_size.height + center.y,
-                -half_size.width + center.x,
-                -half_size.height + center.y,
-                half_size.width + center.x,
-                -half_size.height + center.y,
-            ],
-            CornerRounding::smoothed(half_size.width.min(half_size.height), smoothing),
-            &[],
-            center,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn pill_star(
-        size: Size,
-        vertices_per_radius: usize,
-        inner_radius_ratio: f32,
-        rounding: Option<CornerRounding>,
-        inner_rounding: Option<CornerRounding>,
-        per_vertex_rounding: &[CornerRounding],
-        vertex_spacing: f32,
-        start_location: f32,
-    ) -> Self {
-        Self::pill_star_at(
-            size,
-            vertices_per_radius,
-            inner_radius_ratio,
-            rounding,
-            inner_rounding,
-            per_vertex_rounding,
-            vertex_spacing,
-            start_location,
-            Point::zero(),
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn pill_star_at(
-        size: Size,
-        vertices_per_radius: usize,
-        inner_radius_ratio: f32,
-        rounding: Option<CornerRounding>,
-        inner_rounding: Option<CornerRounding>,
-        per_vertex_rounding: &[CornerRounding],
-        vertex_spacing: f32,
-        start_location: f32,
-        center: Point,
-    ) -> Self {
-        let rounding = rounding.unwrap_or(CornerRounding::UNROUNDED);
-
-        let vertices = pill_star_vertices_from_num_verts(vertices_per_radius, size, inner_radius_ratio, vertex_spacing, start_location, center);
-
-        if !per_vertex_rounding.is_empty() {
-            Self::from_vertices(&vertices, rounding, per_vertex_rounding, center)
-        } else if let Some(inner_rounding) = inner_rounding {
-            // If no per-vertex rounding supplied and caller asked for inner
-            // rounding, create per-vertex rounding list based on
-            // supplied outer/inner rounding parameters
-            Self::from_vertices(
-                &vertices,
-                rounding,
-                &(0..vertices_per_radius).flat_map(|_| [rounding, inner_rounding]).collect::<Vec<_>>(),
-                center,
-            )
-        } else {
-            Self::from_vertices(&vertices, rounding, &[], center)
-        }
     }
 
     /// # Panics
@@ -776,163 +657,4 @@ fn vertices_from_count(count: usize, radius: f32, center: Point) -> Vec<f32> {
     }
 
     result
-}
-
-fn pill_star_vertices_from_num_verts(
-    num_vertices_per_radius: usize,
-    size: Size,
-    inner_radius: f32,
-    vertex_spacing: f32,
-    start_location: f32,
-    center: Point,
-) -> Vec<f32> {
-    // The general approach here is to get the perimeter of the underlying pill
-    // outline, then the t value for each vertex as we walk that perimeter. This
-    // tells us where on the outline to place that vertex, then we figure out
-    // where to place the vertex depending on which "section" it is in. The
-    // possible sections are the vertical edges on the sides, the circular
-    // sections on all four corners, or the horizontal edges on the top and
-    // bottom. Note that either the vertical or horizontal edges will be
-    // of length zero (whichever dimension is smaller gets only circular curvature
-    // for the pill shape).
-    let endcap_radius = size.width.min(size.height);
-    let v_seg_len = (size.height - size.width).max(0.0);
-    let h_seg_len = (size.width - size.height).max(0.0);
-    let v_seg_half = v_seg_len / 2.0;
-    let h_seg_half = h_seg_len / 2.0;
-    // vertexSpacing is used to position the vertices on the end caps. The caller
-    // has the choice of spacing the inner (0) or outer (1) vertices like those
-    // along the edges, causing the other vertices to be either further apart
-    // (0) or closer (1). The default is .5, which averages things. The
-    // magnitude of the inner and rounding parameters may cause the caller
-    // to want a different value.
-    let circle_perimeter = f32::consts::PI * 2.0 * endcap_radius * inner_radius.mul_add(1.0 - vertex_spacing, 1.0 * vertex_spacing);
-    // perimeter is circle perimeter plus horizontal and vertical sections of inner
-    // rectangle, whether either (or even both) might be of length zero.
-    let perimeter = 2.0f32.mul_add(h_seg_len, 2.0 * v_seg_len) + circle_perimeter;
-
-    // The sections array holds the t start values of that part of the outline. We
-    // use these to determine which section a given vertex lies in, based on its
-    // t value, as well as where in that section it lies.
-    let mut sections = [0.0; 11];
-
-    sections[1] = v_seg_len / 2.0;
-    sections[2] = sections[1] + circle_perimeter / 4.0;
-    sections[3] = sections[2] + h_seg_len;
-    sections[4] = sections[3] + circle_perimeter / 4.0;
-    sections[5] = sections[4] + v_seg_len;
-    sections[6] = sections[5] + circle_perimeter / 4.0;
-    sections[7] = sections[6] + h_seg_len;
-    sections[8] = sections[7] + circle_perimeter / 4.0;
-    sections[9] = sections[8] + v_seg_len / 2.0;
-    sections[10] = perimeter;
-
-    // "t" is the length along the entire pill outline for a given vertex. With
-    // vertices spaced evenly along this contour, we can determine for any
-    // vertex where it should lie.
-    let t_per_vertex = perimeter / (2 * num_vertices_per_radius) as f32;
-    // separate iteration for inner vs outer, unlike the other shapes, because
-    // the vertices can lie in different quadrants so each needs their own
-    // calculation
-    let mut inner = false;
-    // Increment section index as we walk around the pill contour with our
-    // increasing t values
-    let mut curr_sec_index = 0;
-    // secStart/End are used to determine how far along a given vertex is in the
-    // section in which it lands
-    let mut sec_start = 0.0;
-    let mut sec_end = sections[1];
-    // t value is used to place each vertex. 0 is on the positive x axis,
-    // moving into section 0 to begin with. startLocation, a value from 0 to 1,
-    // varies the location anywhere on the perimeter of the shape
-    let mut t = start_location * perimeter;
-    // The list of vertices to be returned
-    let mut result = vec![0.0; num_vertices_per_radius * 4];
-    let mut array_index = 0;
-    let rect_bottom_right = Point::new(h_seg_half, v_seg_half);
-    let rect_bottom_left = Point::new(-h_seg_half, v_seg_half);
-    let rect_top_left = Point::new(-h_seg_half, -v_seg_half);
-    let rect_top_right = Point::new(h_seg_half, -v_seg_half);
-
-    // Each iteration through this loop uses the next t value as we walk around the
-    // shape
-    for _ in 0..num_vertices_per_radius * 2 {
-        // t could start (and end) after 0; extra boundedT logic makes sure it does the
-        // right thing when crossing the boundar past 0 again
-        let bounded_t = t % perimeter;
-
-        if bounded_t < sec_start {
-            curr_sec_index = 0;
-        }
-
-        #[allow(clippy::while_float)]
-        while bounded_t >= sections[(curr_sec_index + 1) % sections.len()] {
-            curr_sec_index = (curr_sec_index + 1) % sections.len();
-            sec_start = sections[curr_sec_index];
-            sec_end = sections[(curr_sec_index + 1) % sections.len()];
-        }
-
-        // find t in section and its proportion of that section's total length
-        let t_in_section = bounded_t - sec_start;
-        let t_proportion = t_in_section / (sec_end - sec_start);
-
-        // The vertex placement in a section varies depending on whether it is on one of
-        // the semicircle endcaps or along one of the straight edges. For the
-        // endcaps, we use tProportion to get the angle along that circular cap
-        // and add the starting angle for that section. For the edges we use a
-        // straight linear calculation given tProportion and the start/end t
-        // values for that edge.
-        let curr_radius = if inner { endcap_radius * inner_radius } else { endcap_radius };
-        let vertex: Point = match curr_sec_index {
-            0 => Point::new(curr_radius, t_proportion * v_seg_half),
-            1 => rect_bottom_right + radial_to_cartesian(curr_radius, t_proportion * f32::consts::PI / 2.0),
-            2 => Point::new(t_proportion.mul_add(-h_seg_len, h_seg_half), curr_radius),
-            3 => rect_bottom_left + radial_to_cartesian(curr_radius, f32::consts::PI / 2.0 + (t_proportion * f32::consts::PI / 2.0)),
-            4 => Point::new(-curr_radius, t_proportion.mul_add(-v_seg_len, v_seg_half)),
-            5 => rect_top_left + radial_to_cartesian(curr_radius, f32::consts::PI + (t_proportion * f32::consts::PI / 2.0)),
-            6 => Point::new(t_proportion.mul_add(h_seg_len, -h_seg_half), -curr_radius),
-            7 => rect_top_right + radial_to_cartesian(curr_radius, f32::consts::PI.mul_add(1.5, t_proportion * f32::consts::PI / 2.0)),
-            // 8
-            _ => Point::new(curr_radius, t_proportion.mul_add(v_seg_half, -v_seg_half)),
-        };
-
-        result[array_index] = vertex.x + center.x;
-        array_index += 1;
-
-        result[array_index] = vertex.y + center.y;
-        array_index += 1;
-
-        t += t_per_vertex;
-
-        inner = !inner;
-    }
-
-    result
-}
-
-fn star_vertices_from_num_verts(num_vertices_per_radius: usize, radius: f32, inner_radius: f32, center: Point) -> Vec<f32> {
-    let mut result = vec![0.0; num_vertices_per_radius * 4];
-    let mut array_index = 0;
-
-    for i in 0..num_vertices_per_radius {
-        let mut vertex = radial_to_cartesian(radius, f32::consts::PI / num_vertices_per_radius as f32 * 2.0 * i as f32);
-
-        result[array_index] = vertex.x + center.x;
-        array_index += 1;
-        result[array_index] = vertex.y + center.y;
-        array_index += 1;
-
-        vertex = radial_to_cartesian(inner_radius, f32::consts::PI / num_vertices_per_radius as f32 * (2 * i + 1) as f32);
-
-        result[array_index] = vertex.x + center.x;
-        array_index += 1;
-        result[array_index] = vertex.y + center.y;
-        array_index += 1;
-    }
-
-    result
-}
-
-fn radial_to_cartesian(radius: f32, angle_radians: f32 /* center: Point = Zero */) -> Vector {
-    Vector::new(angle_radians.cos(), angle_radians.sin()) * radius
 }

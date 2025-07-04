@@ -1,6 +1,6 @@
 use crate::{
     CornerRounding, RoundedPoint, RoundedPolygon,
-    geometry::{Angle, Matrix3, Point, Size},
+    geometry::{Angle, Matrix3, Point},
 };
 
 const CORNER_ROUND15: CornerRounding = CornerRounding::new(0.15);
@@ -22,11 +22,11 @@ fn rotate_neg135() -> Matrix3 {
 }
 
 pub fn circle(vertices: Option<usize>) -> RoundedPolygon {
-    RoundedPolygon::circle(vertices.unwrap_or(10), 1.0).normalized()
+    RoundedPolygon::circle().with_vertices(vertices.unwrap_or(10)).build().normalized()
 }
 
 pub fn square() -> RoundedPolygon {
-    RoundedPolygon::rectangle(Size::splat(1.0), Some(CORNER_ROUND30), None).normalized()
+    RoundedPolygon::rectangle().with_rounding(CORNER_ROUND30).build().normalized()
 }
 
 pub fn slanted() -> RoundedPolygon {
@@ -76,18 +76,19 @@ pub fn arrow() -> RoundedPolygon {
 }
 
 pub fn semi_circle() -> RoundedPolygon {
-    RoundedPolygon::rectangle(
-        Size::new(1.6, 1.0),
-        None,
-        Some([CORNER_ROUND20, CORNER_ROUND20, CORNER_ROUND100, CORNER_ROUND100]),
-    )
-    .normalized()
+    RoundedPolygon::rectangle()
+        .with_width(1.6)
+        .with_rounding_per_vertex([CORNER_ROUND20, CORNER_ROUND20, CORNER_ROUND100, CORNER_ROUND100])
+        .build()
+        .normalized()
 }
 
 pub fn oval() -> RoundedPolygon {
-    let m = Matrix3::scale(1.0, 0.64, 1.0);
-
-    RoundedPolygon::circle(8, 1.0).transformed(m).transformed(rotate_neg45()).normalized()
+    RoundedPolygon::circle()
+        .build()
+        .transformed(Matrix3::scale(1.0, 0.64, 1.0))
+        .transformed(rotate_neg45())
+        .normalized()
 }
 
 pub fn pill() -> RoundedPolygon {
@@ -162,7 +163,11 @@ pub fn gem() -> RoundedPolygon {
 }
 
 pub fn sunny() -> RoundedPolygon {
-    RoundedPolygon::star(8, 1.0, 0.8, Some(CORNER_ROUND15), None, &[]).normalized()
+    RoundedPolygon::star(8)
+        .with_inner_radius(0.8)
+        .with_rounding(CORNER_ROUND15)
+        .build()
+        .normalized()
 }
 
 pub fn very_sunny() -> RoundedPolygon {
@@ -204,19 +209,28 @@ pub fn cookie6() -> RoundedPolygon {
 
 pub fn cookie7() -> RoundedPolygon {
     // 7-point cookie
-    RoundedPolygon::star(7, 1.0, 0.75, Some(CORNER_ROUND50), None, &[])
+    RoundedPolygon::star(7)
+        .with_inner_radius(0.75)
+        .with_rounding(CORNER_ROUND50)
+        .build()
         .transformed(rotate_neg90())
         .normalized()
 }
 
 pub fn cookie9() -> RoundedPolygon {
-    RoundedPolygon::star(9, 1.0, 0.8, Some(CORNER_ROUND50), None, &[])
+    RoundedPolygon::star(9)
+        .with_inner_radius(0.8)
+        .with_rounding(CORNER_ROUND50)
+        .build()
         .transformed(rotate_neg90())
         .normalized()
 }
 
 pub fn cookie12() -> RoundedPolygon {
-    RoundedPolygon::star(12, 1.0, 0.8, Some(CORNER_ROUND50), None, &[])
+    RoundedPolygon::star(1)
+        .with_inner_radius(0.8)
+        .with_rounding(CORNER_ROUND50)
+        .build()
         .transformed(rotate_neg90())
         .normalized()
 }
