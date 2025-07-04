@@ -1,5 +1,8 @@
 use float_cmp::assert_approx_eq;
-use polymorpher::{CornerRounding, Cubic, Feature, RoundedPolygon, geometry::Point};
+use polymorpher::{
+    CornerRounding, Cubic, Feature, RoundedPolygon,
+    geometry::{Point, Vector},
+};
 
 const ROUNDING: CornerRounding = CornerRounding::new(1.0);
 const PER_VERTEX: [CornerRounding; 4] = [ROUNDING; 4];
@@ -113,25 +116,16 @@ fn from_vertices_test() {
     let p1 = Point::new(0.0, 1.0);
     let p2 = Point::new(-1.0, 0.0);
     let p3 = Point::new(0.0, -1.0);
-    let verts = [p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y];
+    let verts = [p0, p1, p2, p3];
 
     let square = RoundedPolygon::from_vertices(&verts, CornerRounding::UNROUNDED, &[], Point::splat(f32::MIN));
 
     assert_is_inside(&square.cubics, Point::splat(-1.0), Point::splat(1.0));
 
-    let offset = Point::new(1.0, 2.0);
-    let offset_verts = [
-        p0.x + offset.x,
-        p0.y + offset.y,
-        p1.x + offset.x,
-        p1.y + offset.y,
-        p2.x + offset.x,
-        p2.y + offset.y,
-        p3.x + offset.x,
-        p3.y + offset.y,
-    ];
+    let offset = Vector::new(1.0, 2.0);
+    let offset_verts = [p0 + offset, p1 + offset, p2 + offset, p3 + offset];
 
-    let square = RoundedPolygon::from_vertices(&offset_verts, CornerRounding::UNROUNDED, &[], offset);
+    let square = RoundedPolygon::from_vertices(&offset_verts, CornerRounding::UNROUNDED, &[], offset.to_point());
 
     assert_is_inside(&square.cubics, Point::new(0.0, 1.0), Point::new(2.0, 3.0));
 
@@ -209,7 +203,7 @@ fn same_pill_star_from_features_test() {
 #[test]
 fn calc_center_test() {
     let polygon = RoundedPolygon::from_vertices(
-        &[0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+        &[Point::zero(), Point::new(1.0, 0.0), Point::new(0.0, 1.0), Point::splat(1.0)],
         CornerRounding::UNROUNDED,
         &[],
         Point::splat(f32::MIN),
@@ -217,17 +211,6 @@ fn calc_center_test() {
 
     assert_approx_eq!(f32, 0.5, polygon.center.x, epsilon = 1e-4);
     assert_approx_eq!(f32, 0.5, polygon.center.y, epsilon = 1e-4);
-}
-
-fn points_to_floats(points: &[Point]) -> Vec<f32> {
-    let mut result = Vec::with_capacity(points.len() * 2);
-
-    for point in points {
-        result.push(point.x);
-        result.push(point.y);
-    }
-
-    result
 }
 
 #[test]
@@ -240,12 +223,7 @@ fn rounding_space_usage_test() {
         CornerRounding::smoothed(1.0, 1.0),
         CornerRounding::UNROUNDED,
     ];
-    let polygon = RoundedPolygon::from_vertices(
-        &points_to_floats(&[p0, p1, p2]),
-        CornerRounding::UNROUNDED,
-        &pv_rounding,
-        Point::splat(f32::MIN),
-    );
+    let polygon = RoundedPolygon::from_vertices(&[p0, p1, p2], CornerRounding::UNROUNDED, &pv_rounding, Point::splat(f32::MIN));
 
     // Since there is not enough room in the p0 -> p1 side even for the roundings,
     // we shouldn't take smoothing into account, so the corners should end in
@@ -368,12 +346,7 @@ fn do_uneven_smooth_test(rounding0: CornerRounding, expected_v0_sx: f32, expecte
     let p3 = Point::new(0.0, 1.0);
 
     let pv_rounding = [rounding0, CornerRounding::UNROUNDED, CornerRounding::UNROUNDED, rounding3];
-    let polygon = RoundedPolygon::from_vertices(
-        &points_to_floats(&[p0, p1, p2, p3]),
-        CornerRounding::UNROUNDED,
-        &pv_rounding,
-        Point::splat(f32::MIN),
-    );
+    let polygon = RoundedPolygon::from_vertices(&[p0, p1, p2, p3], CornerRounding::UNROUNDED, &pv_rounding, Point::splat(f32::MIN));
 
     let features = polygon.features.iter().filter(|feature| !feature.is_corner()).collect::<Vec<_>>();
     let [e01, _, _, e30] = features.as_slice() else { unreachable!() };

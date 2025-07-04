@@ -2,7 +2,7 @@ use core::f32;
 
 use crate::{
     CornerRounding, RoundedPolygon,
-    geometry::{Point, Size},
+    geometry::{Point, Size, Vector},
     util::radial_to_cartesian,
 };
 
@@ -180,7 +180,12 @@ impl RoundedPolygonBuilder<Rectangle> {
         let [left, top] = (self.center - self.data.size / 2.0).to_array();
         let [right, bottom] = (self.center + self.data.size / 2.0).to_array();
 
-        let vertices = [right, bottom, left, bottom, left, top, right, top];
+        let vertices = [
+            Point::new(right, bottom),
+            Point::new(left, bottom),
+            Point::new(left, top),
+            Point::new(right, top),
+        ];
 
         RoundedPolygon::from_vertices(&vertices, self.rounding, &self.per_vertex_rounding, self.center)
     }
@@ -239,14 +244,10 @@ impl RoundedPolygonBuilder<Pill> {
 
         RoundedPolygon::from_vertices(
             &[
-                half_size.width + self.center.x,
-                half_size.height + self.center.y,
-                -half_size.width + self.center.x,
-                half_size.height + self.center.y,
-                -half_size.width + self.center.x,
-                -half_size.height + self.center.y,
-                half_size.width + self.center.x,
-                -half_size.height + self.center.y,
+                self.center + half_size,
+                self.center + Vector::new(-half_size.width, half_size.height),
+                self.center - half_size,
+                self.center + Vector::new(half_size.width, -half_size.height),
             ],
             CornerRounding::smoothed(half_size.width.min(half_size.height), self.data.smoothing),
             &[],
@@ -328,7 +329,7 @@ fn pill_star_vertices_from_num_verts(
     vertex_spacing: f32,
     start_location: f32,
     center: Point,
-) -> Vec<f32> {
+) -> Vec<Point> {
     // The general approach here is to get the perimeter of the underlying pill
     // outline, then the t value for each vertex as we walk that perimeter. This
     // tells us where on the outline to place that vertex, then we figure out
@@ -390,8 +391,7 @@ fn pill_star_vertices_from_num_verts(
     // varies the location anywhere on the perimeter of the shape
     let mut t = start_location * perimeter;
     // The list of vertices to be returned
-    let mut result = vec![0.0; num_vertices_per_radius * 4];
-    let mut array_index = 0;
+    let mut result = Vec::with_capacity(num_vertices_per_radius * 2);
     let rect_bottom_right = Point::new(h_seg_half, v_seg_half);
     let rect_bottom_left = Point::new(-h_seg_half, v_seg_half);
     let rect_top_left = Point::new(-h_seg_half, -v_seg_half);
@@ -426,7 +426,7 @@ fn pill_star_vertices_from_num_verts(
         // straight linear calculation given tProportion and the start/end t
         // values for that edge.
         let curr_radius = if inner { endcap_radius * inner_radius } else { endcap_radius };
-        let vertex: Point = match curr_sec_index {
+        let vertex = match curr_sec_index {
             0 => Point::new(curr_radius, t_proportion * v_seg_half),
             1 => rect_bottom_right + radial_to_cartesian(curr_radius, t_proportion * f32::consts::PI / 2.0),
             2 => Point::new(t_proportion.mul_add(-h_seg_len, h_seg_half), curr_radius),
@@ -439,11 +439,7 @@ fn pill_star_vertices_from_num_verts(
             _ => Point::new(curr_radius, t_proportion.mul_add(v_seg_half, -v_seg_half)),
         };
 
-        result[array_index] = vertex.x + center.x;
-        array_index += 1;
-
-        result[array_index] = vertex.y + center.y;
-        array_index += 1;
+        result.push(vertex + center.to_vector());
 
         t += t_per_vertex;
 
@@ -453,25 +449,14 @@ fn pill_star_vertices_from_num_verts(
     result
 }
 
-fn star_vertices_from_num_verts(num_vertices_per_radius: usize, radius: f32, inner_radius: f32, center: Point) -> Vec<f32> {
-    let mut result = vec![0.0; num_vertices_per_radius * 4];
-    let mut array_index = 0;
-
-    for i in 0..num_vertices_per_radius {
-        let mut vertex = radial_to_cartesian(radius, f32::consts::PI / num_vertices_per_radius as f32 * 2.0 * i as f32);
-
-        result[array_index] = vertex.x + center.x;
-        array_index += 1;
-        result[array_index] = vertex.y + center.y;
-        array_index += 1;
-
-        vertex = radial_to_cartesian(inner_radius, f32::consts::PI / num_vertices_per_radius as f32 * (2 * i + 1) as f32);
-
-        result[array_index] = vertex.x + center.x;
-        array_index += 1;
-        result[array_index] = vertex.y + center.y;
-        array_index += 1;
-    }
-
-    result
+fn star_vertices_from_num_verts(num_vertices_per_radius: usize, radius: f32, inner_radius: f32, center: Point) -> Vec<Point> {
+    (0..num_vertices_per_radius * 2)
+        .map(|i| {
+            center
+                + radial_to_cartesian(
+                    if i % 2 == 0 { radius } else { inner_radius },
+                    f32::consts::PI / num_vertices_per_radius as f32 * i as f32,
+                )
+        })
+        .collect()
 }

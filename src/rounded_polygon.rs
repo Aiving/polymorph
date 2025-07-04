@@ -334,7 +334,7 @@ impl RoundedPolygon {
         let center = center.unwrap_or_else(|| Point::splat(f32::NAN));
         let vertices = features
             .iter()
-            .flat_map(|feature| feature.cubics.iter().flat_map(|cubic| [cubic.anchor0().x, cubic.anchor0().y]))
+            .flat_map(|feature| feature.cubics.iter().map(Cubic::anchor0))
             .collect::<Vec<_>>();
 
         let center = if center.x.is_nan() || center.y.is_nan() {
@@ -430,28 +430,23 @@ impl RoundedPolygon {
     /// - The `per_vertex_rounding` is not empty, but its size does not
     ///   correspond to the number of vertices in the polygon (`vertices.len() /
     ///   2`)
-    pub fn from_vertices(vertices: &[f32], rounding: CornerRounding, per_vertex_rounding: &[CornerRounding], center: Point) -> Self {
-        assert!(vertices.len() >= 6, "Polygons must have at least 3 vertices");
-        assert!(vertices.len() % 2 != 1, "The vertices array should have even size");
+    pub fn from_vertices(vertices: &[Point], rounding: CornerRounding, per_vertex_rounding: &[CornerRounding], center: Point) -> Self {
+        assert!(vertices.len() >= 3, "Polygons must have at least 3 vertices");
         assert!(
-            per_vertex_rounding.is_empty() || per_vertex_rounding.len() * 2 == vertices.len(),
-            "per_vertex_rounding array should be either empty or the same size as the number of vertices (vertices.len() / 2)"
+            per_vertex_rounding.is_empty() || per_vertex_rounding.len() == vertices.len(),
+            "per_vertex_rounding array should be either empty or the same size as the number of vertices"
         );
 
         let mut corners = <Vec<Vec<Cubic>>>::new();
-        let n = vertices.len() / 2;
+        let n = vertices.len();
         let mut rounded_corners = <Vec<RoundedCorner>>::new();
 
         for i in 0..n {
-            let vtx_rounding = per_vertex_rounding.get(i).copied().unwrap_or(rounding);
-            let prev_index = ((i + n - 1) % n) * 2;
-            let next_index = ((i + 1) % n) * 2;
-
             rounded_corners.push(RoundedCorner::new(
-                Point::new(vertices[prev_index], vertices[prev_index + 1]),
-                Point::new(vertices[i * 2], vertices[i * 2 + 1]),
-                Point::new(vertices[next_index], vertices[next_index + 1]),
-                Some(vtx_rounding),
+                vertices[(i + n - 1) % n],
+                vertices[i],
+                vertices[(i + 1) % n],
+                Some(per_vertex_rounding.get(i).copied().unwrap_or(rounding)),
             ));
         }
 
@@ -459,11 +454,9 @@ impl RoundedPolygon {
             .map(|ix| {
                 let expected_round_cut = rounded_corners[ix].expected_round_cut + rounded_corners[(ix + 1) % n].expected_round_cut;
                 let expected_cut = rounded_corners[ix].expected_cut() + rounded_corners[(ix + 1) % n].expected_cut();
-                let vtx_x = vertices[ix * 2];
-                let vtx_y = vertices[ix * 2 + 1];
-                let next_vtx_x = vertices[((ix + 1) % n) * 2];
-                let next_vtx_y = vertices[((ix + 1) % n) * 2 + 1];
-                let side_size = (vtx_x - next_vtx_x).hypot(vtx_y - next_vtx_y);
+                let vtx = vertices[ix];
+                let next_vtx = vertices[(ix + 1) % n];
+                let side_size = (vtx.x - next_vtx.x).hypot(vtx.y - next_vtx.y);
 
                 // Check expected_round_cut first, and ensure we fulfill rounding needs first
                 // for both corners before using space for smoothing
@@ -507,10 +500,7 @@ impl RoundedPolygon {
             // doubled to access the xy values in the vertices float array
             let prev_vtx_index = (i + n - 1) % n;
             let next_vtx_index = (i + 1) % n;
-            let curr_vertex = Point::new(vertices[i * 2], vertices[i * 2 + 1]);
-            let prev_vertex = Point::new(vertices[prev_vtx_index * 2], vertices[prev_vtx_index * 2 + 1]);
-            let next_vertex = Point::new(vertices[next_vtx_index * 2], vertices[next_vtx_index * 2 + 1]);
-            let convex = prev_vertex.is_convex(curr_vertex, next_vertex);
+            let convex = vertices[prev_vtx_index].is_convex(vertices[i], vertices[next_vtx_index]);
 
             temp_features.push(Feature::corner(corners[i].clone(), convex));
             temp_features.push(Feature::edge(vec![Cubic::straight_line(
@@ -589,20 +579,14 @@ impl RoundedPolygon {
     }
 }
 
-fn center_from_vertices(vertices: &[f32]) -> Point {
-    let mut cumulative_x = 0.0;
-    let mut cumulative_y = 0.0;
-    let mut index = 0;
+fn center_from_vertices(vertices: &[Point]) -> Point {
+    let mut cumulative = Point::zero();
 
-    while index < vertices.len() {
-        cumulative_x += vertices[index];
-        index += 1;
-
-        cumulative_y += vertices[index];
-        index += 1;
+    for vertice in vertices {
+        cumulative += vertice.to_vector();
     }
 
-    Point::new(cumulative_x / (vertices.len() as f32 / 2.0), cumulative_y / (vertices.len() as f32 / 2.0))
+    cumulative / vertices.len() as f32
 }
 
 #[allow(clippy::manual_is_multiple_of)] // For MSRV compability
@@ -658,32 +642,15 @@ fn custom_polygon(points: &[RoundedPoint], repeats: usize, center: Option<Point>
     }
 
     RoundedPolygon::from_vertices(
-        &(0..(actual_points.len() * 2))
-            .map(|ix| {
-                let it = actual_points[ix / 2].offset;
-
-                if ix % 2 == 0 { it.x } else { it.y }
-            })
-            .collect::<Vec<_>>(),
+        &actual_points.iter().map(|p| p.offset).collect::<Vec<_>>(),
         CornerRounding::UNROUNDED,
         &actual_points.iter().map(|p| p.rounding).collect::<Vec<_>>(),
         center,
     )
 }
 
-fn vertices_from_count(count: usize, radius: f32, center: Point) -> Vec<f32> {
-    let mut result = vec![0.0; count * 2];
-    let mut array_index = 0;
-
-    for i in 0..count {
-        let vertex = center + radial_to_cartesian(radius, f32::consts::PI / count as f32 * 2.0 * i as f32);
-
-        result[array_index] = vertex.x;
-        array_index += 1;
-
-        result[array_index] = vertex.y;
-        array_index += 1;
-    }
-
-    result
+fn vertices_from_count(count: usize, radius: f32, center: Point) -> Vec<Point> {
+    (0..count)
+        .map(|i| center + radial_to_cartesian(radius, f32::consts::PI / count as f32 * 2.0 * i as f32))
+        .collect()
 }

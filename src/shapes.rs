@@ -227,7 +227,7 @@ pub fn cookie9() -> RoundedPolygon {
 }
 
 pub fn cookie12() -> RoundedPolygon {
-    RoundedPolygon::star(1)
+    RoundedPolygon::star(12)
         .with_inner_radius(0.8)
         .with_rounding(CORNER_ROUND50)
         .build()
