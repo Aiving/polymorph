@@ -95,6 +95,31 @@ impl<T: lyon_tessellation::path::traits::PathBuilder + lyon_tessellation::path::
     }
 }
 
+#[cfg(feature = "tiny-skia")]
+impl PathBuilder for tiny_skia_path::PathBuilder {
+    type Path = Option<tiny_skia_path::Path>;
+
+    fn move_to(&mut self, point: Point) {
+        self.move_to(point.x, point.y);
+    }
+
+    fn line_to(&mut self, point: Point) {
+        self.line_to(point.x, point.y);
+    }
+
+    fn cubic_to(&mut self, ctrl1: Point, ctrl2: Point, to: Point) {
+        self.cubic_to(ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, to.x, to.y);
+    }
+
+    fn close(&mut self) {
+        self.close();
+    }
+
+    fn build(self) -> Self::Path {
+        self.finish()
+    }
+}
+
 #[cfg(feature = "skia")]
 impl PathBuilder for skia_safe::PathBuilder {
     type Path = skia_safe::Path;

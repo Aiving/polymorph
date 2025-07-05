@@ -80,6 +80,16 @@ impl HaveSize for PillStar {
 
 impl HaveRounding for PillStar {}
 
+/// Provides a more convenient and familiar way to create certain shapes using
+/// builder pattern, helping to avoid functions with hellish `Option<T>`
+/// arguments.
+///
+/// Currently supports the creation of the following shapes:
+/// - Rectangles
+/// - Circles
+/// - Stars
+/// - Pills
+/// - Pill stars
 pub struct RoundedPolygonBuilder<T> {
     pub(crate) data: T,
     pub(crate) center: Point,
@@ -88,6 +98,7 @@ pub struct RoundedPolygonBuilder<T> {
 }
 
 impl<T> RoundedPolygonBuilder<T> {
+    /// Sets the center point for the resulting rounded polygon.
     #[must_use]
     pub const fn with_center(mut self, center: Point) -> Self {
         self.center = center;
@@ -97,6 +108,7 @@ impl<T> RoundedPolygonBuilder<T> {
 }
 
 impl<T: HaveRounding> RoundedPolygonBuilder<T> {
+    /// Sets the common [`CornerRounding`] for each of the vertices.
     #[must_use]
     pub const fn with_rounding(mut self, rounding: CornerRounding) -> Self {
         self.rounding = rounding;
@@ -104,6 +116,8 @@ impl<T: HaveRounding> RoundedPolygonBuilder<T> {
         self
     }
 
+    /// Sets [`CornerRounding`] for each individual vertex. The size of the
+    /// iterator must be equal to the number of vertices.
     #[must_use]
     pub fn with_rounding_per_vertex<I: IntoIterator<Item = CornerRounding>>(mut self, iter: I) -> Self {
         self.per_vertex_rounding = iter.into_iter().collect();
@@ -113,6 +127,7 @@ impl<T: HaveRounding> RoundedPolygonBuilder<T> {
 }
 
 impl<T: HaveSize> RoundedPolygonBuilder<T> {
+    /// Sets the size of the resulting shape.
     #[must_use]
     pub fn with_size(mut self, size: Size) -> Self {
         *self.data.size() = size;
@@ -120,6 +135,7 @@ impl<T: HaveSize> RoundedPolygonBuilder<T> {
         self
     }
 
+    /// Sets the width of the resulting shape.
     #[must_use]
     pub fn with_width(mut self, width: f32) -> Self {
         self.data.size().width = width;
@@ -127,6 +143,7 @@ impl<T: HaveSize> RoundedPolygonBuilder<T> {
         self
     }
 
+    /// Sets the height of the resulting shape.
     #[must_use]
     pub fn with_height(mut self, height: f32) -> Self {
         self.data.size().height = height;
@@ -136,6 +153,7 @@ impl<T: HaveSize> RoundedPolygonBuilder<T> {
 }
 
 impl<T: HaveRadius> RoundedPolygonBuilder<T> {
+    /// Sets the radius of the resulting shape.
     #[must_use]
     pub fn with_radius(mut self, radius: f32) -> Self {
         *self.data.radius() = radius;
@@ -145,6 +163,8 @@ impl<T: HaveRadius> RoundedPolygonBuilder<T> {
 }
 
 impl RoundedPolygonBuilder<Circle> {
+    /// Sets the number of vertices in the resulting polygon with which to
+    /// approximate the circle.
     #[must_use]
     pub const fn with_vertices(mut self, vertices: usize) -> Self {
         self.data.vertices = vertices;
@@ -152,6 +172,8 @@ impl RoundedPolygonBuilder<Circle> {
         self
     }
 
+    /// Consuming itself, it creates and returns [`RoundedPolygon`], which forms
+    /// a circle.
     pub fn build(self) -> RoundedPolygon {
         let theta = f32::consts::PI / self.data.vertices as f32;
         let polygon_radius = self.data.radius / theta.cos();
@@ -162,6 +184,7 @@ impl RoundedPolygonBuilder<Circle> {
 }
 
 impl RoundedPolygonBuilder<Rectangle> {
+    /// Sets the common [`CornerRounding`] for each of the rectangle corners.
     #[must_use]
     pub const fn with_rounding(mut self, rounding: CornerRounding) -> Self {
         self.rounding = rounding;
@@ -169,6 +192,8 @@ impl RoundedPolygonBuilder<Rectangle> {
         self
     }
 
+    /// Sets [`CornerRounding`] for each individual corner. The size of the
+    /// iterator must be equal to 4 for four rectangle corners.
     #[must_use]
     pub fn with_rounding_per_vertex(mut self, corners: [CornerRounding; 4]) -> Self {
         self.per_vertex_rounding = corners.into();
@@ -176,6 +201,8 @@ impl RoundedPolygonBuilder<Rectangle> {
         self
     }
 
+    /// Consuming itself, it creates and returns [`RoundedPolygon`], which forms
+    /// a rectangle.
     pub fn build(self) -> RoundedPolygon {
         let [left, top] = (self.center - self.data.size / 2.0).to_array();
         let [right, bottom] = (self.center + self.data.size / 2.0).to_array();
@@ -192,6 +219,8 @@ impl RoundedPolygonBuilder<Rectangle> {
 }
 
 impl RoundedPolygonBuilder<Star> {
+    /// Set inner radius for the resulting star shape, which must be greater
+    /// than 0 and less than or equal to radius.
     #[must_use]
     pub const fn with_inner_radius(mut self, radius: f32) -> Self {
         self.data.inner_radius = radius;
@@ -199,6 +228,8 @@ impl RoundedPolygonBuilder<Star> {
         self
     }
 
+    /// Sets the common [`CornerRounding`] for each of the vertices on the inner
+    /// radius.
     #[must_use]
     pub const fn with_inner_rounding(mut self, rounding: CornerRounding) -> Self {
         self.data.inner_rounding.replace(rounding);
@@ -206,6 +237,8 @@ impl RoundedPolygonBuilder<Star> {
         self
     }
 
+    /// Consuming itself, it creates and returns [`RoundedPolygon`], which forms
+    /// a star.
     pub fn build(self) -> RoundedPolygon {
         let vertices = star_vertices_from_num_verts(self.data.vertices_per_radius, self.data.radius, self.data.inner_radius, self.center);
 
@@ -232,6 +265,8 @@ impl RoundedPolygonBuilder<Star> {
 }
 
 impl RoundedPolygonBuilder<Pill> {
+    /// Sets the amount by which the arc is "smoothed" by extending the curve
+    /// from the circular arc on each endcap to the edge between the endcaps.
     #[must_use]
     pub const fn with_smoothing(mut self, smoothing: f32) -> Self {
         self.data.smoothing = smoothing;
@@ -239,6 +274,8 @@ impl RoundedPolygonBuilder<Pill> {
         self
     }
 
+    /// Consuming itself, it creates and returns [`RoundedPolygon`], which forms
+    /// a pill.
     pub fn build(self) -> RoundedPolygon {
         let half_size = self.data.size / 2.0;
 
@@ -257,6 +294,7 @@ impl RoundedPolygonBuilder<Pill> {
 }
 
 impl RoundedPolygonBuilder<PillStar> {
+    // Sets the number of vertices along each of the two radii.
     #[must_use]
     pub const fn with_vertices_per_radius(mut self, count: usize) -> Self {
         self.data.vertices_per_radius = count;
@@ -264,6 +302,8 @@ impl RoundedPolygonBuilder<PillStar> {
         self
     }
 
+    /// Sets the vertex spacing factor, which determines how vertices on the
+    /// circular ends are laid out along the outline.
     #[must_use]
     pub const fn with_vertex_spacing(mut self, spacing: f32) -> Self {
         self.data.vertex_spacing = spacing;
@@ -271,6 +311,9 @@ impl RoundedPolygonBuilder<PillStar> {
         self
     }
 
+    /// Sets the start location which determines how far along the perimeter of
+    /// the resulting shape to start the underlying curves of which it is
+    /// comprised.
     #[must_use]
     pub const fn with_start_location(mut self, location: f32) -> Self {
         self.data.start_location = location;
@@ -278,6 +321,8 @@ impl RoundedPolygonBuilder<PillStar> {
         self
     }
 
+    /// Sets the inner radius ratio for the resulting star shape, must be
+    /// greater than 0 and less than or equal to 1.
     #[must_use]
     pub const fn with_inner_radius_ratio(mut self, radius: f32) -> Self {
         self.data.inner_radius_ratio = radius;
@@ -285,6 +330,8 @@ impl RoundedPolygonBuilder<PillStar> {
         self
     }
 
+    /// Sets the common [`CornerRounding`] for each of the vertices on the inner
+    /// radius ratio.
     #[must_use]
     pub const fn with_inner_rounding(mut self, rounding: CornerRounding) -> Self {
         self.data.inner_rounding.replace(rounding);
@@ -292,6 +339,8 @@ impl RoundedPolygonBuilder<PillStar> {
         self
     }
 
+    /// Consuming itself, it creates and returns [`RoundedPolygon`], which forms
+    /// a pill star.
     pub fn build(self) -> RoundedPolygon {
         let vertices = pill_star_vertices_from_num_verts(
             self.data.vertices_per_radius,
