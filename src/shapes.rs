@@ -1,3 +1,5 @@
+//! Contains built-in functions for generating shapes.
+
 use crate::{
     CornerRounding, RoundedPoint, RoundedPolygon,
     geometry::{Angle, Matrix3, Point},
@@ -21,14 +23,17 @@ fn rotate_neg135() -> Matrix3 {
     Matrix3::rotation(0.0, 0.0, 1.0, -Angle::degrees(135.0))
 }
 
+/// A circle shape.
 pub fn circle(vertices: Option<usize>) -> RoundedPolygon {
     RoundedPolygon::circle().with_vertices(vertices.unwrap_or(10)).build().normalized()
 }
 
+/// An rounded square shape.
 pub fn square() -> RoundedPolygon {
     RoundedPolygon::rectangle().with_rounding(CORNER_ROUND30).build().normalized()
 }
 
+/// A slanted square shape
 pub fn slanted() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -41,12 +46,14 @@ pub fn slanted() -> RoundedPolygon {
     .normalized()
 }
 
+/// An arch shape.
 pub fn arch() -> RoundedPolygon {
     RoundedPolygon::from_vertices_count(4, 1.0, None, &[CORNER_ROUND100, CORNER_ROUND100, CORNER_ROUND20, CORNER_ROUND20])
         .transformed(rotate_neg135())
         .normalized()
 }
 
+/// A fan shape
 pub fn fan() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -61,6 +68,7 @@ pub fn fan() -> RoundedPolygon {
     .normalized()
 }
 
+/// An arrow shape.
 pub fn arrow() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -75,6 +83,7 @@ pub fn arrow() -> RoundedPolygon {
     .normalized()
 }
 
+/// A semi-circle shape.
 pub fn semi_circle() -> RoundedPolygon {
     RoundedPolygon::rectangle()
         .with_width(1.6)
@@ -83,6 +92,7 @@ pub fn semi_circle() -> RoundedPolygon {
         .normalized()
 }
 
+/// An oval shape.
 pub fn oval() -> RoundedPolygon {
     RoundedPolygon::circle()
         .build()
@@ -91,6 +101,7 @@ pub fn oval() -> RoundedPolygon {
         .normalized()
 }
 
+/// A pill shape.
 pub fn pill() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -104,12 +115,14 @@ pub fn pill() -> RoundedPolygon {
     .normalized()
 }
 
+/// A rounded triangle shape.
 pub fn triangle() -> RoundedPolygon {
     RoundedPolygon::from_vertices_count(3, 1.0, Some(CORNER_ROUND20), &[])
         .transformed(rotate_neg90())
         .normalized()
 }
 
+/// A diamond shape.
 pub fn diamond() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -122,6 +135,7 @@ pub fn diamond() -> RoundedPolygon {
     .normalized()
 }
 
+/// A clam-shell shape.
 pub fn clam_shell() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -135,6 +149,7 @@ pub fn clam_shell() -> RoundedPolygon {
     .normalized()
 }
 
+/// A pentagon shape.
 pub fn pentagon() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -148,6 +163,7 @@ pub fn pentagon() -> RoundedPolygon {
     .normalized()
 }
 
+/// A gem shape.
 pub fn gem() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -162,6 +178,7 @@ pub fn gem() -> RoundedPolygon {
     .normalized()
 }
 
+/// A sunny shape.
 pub fn sunny() -> RoundedPolygon {
     RoundedPolygon::star(8)
         .with_inner_radius(0.8)
@@ -170,6 +187,7 @@ pub fn sunny() -> RoundedPolygon {
         .normalized()
 }
 
+/// A very-sunny shape.
 pub fn very_sunny() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -182,6 +200,7 @@ pub fn very_sunny() -> RoundedPolygon {
     .normalized()
 }
 
+/// A 4-sided cookie shape.
 pub fn cookie4() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -194,6 +213,7 @@ pub fn cookie4() -> RoundedPolygon {
     .normalized()
 }
 
+/// A 6-sided cookie shape.
 pub fn cookie6() -> RoundedPolygon {
     // 6-point cookie
     RoundedPolygon::from_points(
@@ -207,6 +227,7 @@ pub fn cookie6() -> RoundedPolygon {
     .normalized()
 }
 
+/// A 7-sided cookie shape.
 pub fn cookie7() -> RoundedPolygon {
     // 7-point cookie
     RoundedPolygon::star(7)
@@ -217,6 +238,7 @@ pub fn cookie7() -> RoundedPolygon {
         .normalized()
 }
 
+/// A 9-sided cookie shape.
 pub fn cookie9() -> RoundedPolygon {
     RoundedPolygon::star(9)
         .with_inner_radius(0.8)
@@ -226,6 +248,7 @@ pub fn cookie9() -> RoundedPolygon {
         .normalized()
 }
 
+/// A 12-sided cookie shape.
 pub fn cookie12() -> RoundedPolygon {
     RoundedPolygon::star(12)
         .with_inner_radius(0.8)
@@ -235,6 +258,7 @@ pub fn cookie12() -> RoundedPolygon {
         .normalized()
 }
 
+/// A ghost-ish shape.
 pub fn ghostish() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -249,6 +273,7 @@ pub fn ghostish() -> RoundedPolygon {
     .normalized()
 }
 
+/// A 4-leaf clover shape.
 pub fn clover4() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -261,6 +286,7 @@ pub fn clover4() -> RoundedPolygon {
     .normalized()
 }
 
+/// An 8-leaf clover shape.
 pub fn clover8() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -273,6 +299,7 @@ pub fn clover8() -> RoundedPolygon {
     .normalized()
 }
 
+/// A burst shape.
 pub fn burst() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -285,6 +312,7 @@ pub fn burst() -> RoundedPolygon {
     .normalized()
 }
 
+/// A soft-burst shape.
 pub fn soft_burst() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -297,6 +325,7 @@ pub fn soft_burst() -> RoundedPolygon {
     .normalized()
 }
 
+/// A boom shape.
 pub fn boom() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -309,6 +338,7 @@ pub fn boom() -> RoundedPolygon {
     .normalized()
 }
 
+/// A soft-boom shape.
 pub fn soft_boom() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -323,6 +353,7 @@ pub fn soft_boom() -> RoundedPolygon {
     .normalized()
 }
 
+/// A flower shape.
 pub fn flower() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -336,6 +367,7 @@ pub fn flower() -> RoundedPolygon {
     .normalized()
 }
 
+/// A puffy shape.
 pub fn puffy() -> RoundedPolygon {
     let matrix = Matrix3::scale(1.0, 0.742, 1.0);
 
@@ -360,6 +392,7 @@ pub fn puffy() -> RoundedPolygon {
     .normalized()
 }
 
+/// A puffy-diamond shape.
 pub fn puffy_diamond() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -373,6 +406,7 @@ pub fn puffy_diamond() -> RoundedPolygon {
     .normalized()
 }
 
+/// A pixel-circle shape.
 pub fn pixel_circle() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -391,6 +425,7 @@ pub fn pixel_circle() -> RoundedPolygon {
     .normalized()
 }
 
+/// A pixel-triangle shape.
 pub fn pixel_triangle() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -414,6 +449,7 @@ pub fn pixel_triangle() -> RoundedPolygon {
     .normalized()
 }
 
+/// A bun shape.
 pub fn bun() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[
@@ -428,6 +464,7 @@ pub fn bun() -> RoundedPolygon {
     .normalized()
 }
 
+/// A heart shape.
 pub fn heart() -> RoundedPolygon {
     RoundedPolygon::from_points(
         &[

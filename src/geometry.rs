@@ -1,3 +1,7 @@
+//! Contains wrappers over geometric types from `euclid`, an extension trait for
+//! them, and the `PointTransformer` trait required for
+//! `RoundedPolygon::transformed`.
+
 use core::f32;
 
 pub type Size = euclid::default::Size2D<f32>;

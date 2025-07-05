@@ -1,5 +1,7 @@
 use crate::{Cubic, geometry::Point};
 
+/// A necessary trait for creating paths from polygons or adding polygons to
+/// existing paths.
 pub trait PathBuilder {
     type Path;
 
