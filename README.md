@@ -9,6 +9,7 @@ A library for creating and morphing potentially rounded polygons. Based on the [
 
 ## Features
 
+- `kurbo`: implements `PathBuilder` for `kurbo::BezPath`.
 - `skia`: implements `PathBuilder` for `skia_safe::PathBuilder` and `skia_safe::Path`.
 - `lyon`: implements `PathBuilder` for everything that implements `lyon`'s `PathBuilder`.
 
